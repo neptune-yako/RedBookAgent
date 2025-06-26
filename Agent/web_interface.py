@@ -330,6 +330,16 @@ def init_session_state():
         st.session_state.generating = False
     if 'generation_progress' not in st.session_state:
         st.session_state.generation_progress = 0
+    # 版本历史管理
+    if 'content_history' not in st.session_state:
+        st.session_state.content_history = []
+    if 'current_version_index' not in st.session_state:
+        st.session_state.current_version_index = -1
+    # 反馈回环状态
+    if 'feedback_round' not in st.session_state:
+        st.session_state.feedback_round = 0
+    if 'show_version_history_flag' not in st.session_state:
+        st.session_state.show_version_history_flag = False
     if 'user_preferences' not in st.session_state:
         st.session_state.user_preferences = {
             'favorite_categories': [],
@@ -451,6 +461,617 @@ def create_generation_progress():
         """, unsafe_allow_html=True)
     
     return update_progress, progress_container
+
+
+def add_content_to_history(content: str, action: str = "生成"):
+    """将内容添加到版本历史"""
+    if content and content.strip():
+        import time
+        version_info = {
+            "content": content,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "action": action,
+            "version": len(st.session_state.content_history) + 1
+        }
+        st.session_state.content_history.append(version_info)
+        st.session_state.current_version_index = len(st.session_state.content_history) - 1
+
+
+def get_current_version():
+    """获取当前版本的内容"""
+    if st.session_state.content_history and st.session_state.current_version_index >= 0:
+        return st.session_state.content_history[st.session_state.current_version_index]
+    return None
+
+
+def restore_previous_version():
+    """恢复到上一个版本"""
+    if st.session_state.current_version_index > 0:
+        st.session_state.current_version_index -= 1
+        previous_version = st.session_state.content_history[st.session_state.current_version_index]
+        st.session_state.last_generated_content = previous_version["content"]
+        return previous_version
+    return None
+
+
+def show_version_history():
+    """显示版本历史界面"""
+    if not st.session_state.content_history:
+        return
+    
+    st.markdown("### 📚 版本历史")
+    
+    # 显示当前版本信息
+    current_version = get_current_version()
+    if current_version:
+        st.markdown(f"""
+        <div class="content-card" style="border-left: 4px solid #28a745;">
+            <h5>📍 当前版本：第 {current_version['version']} 版</h5>
+            <p><strong>操作：</strong>{current_version['action']} | <strong>时间：</strong>{current_version['timestamp']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # 版本历史列表
+    with st.expander(f"📜 查看历史版本 (共 {len(st.session_state.content_history)} 个版本)", expanded=False):
+        for i, version in enumerate(reversed(st.session_state.content_history)):
+            is_current = i == (len(st.session_state.content_history) - 1 - st.session_state.current_version_index)
+            
+            # 版本卡片
+            border_color = "#28a745" if is_current else "#dee2e6"
+            st.markdown(f"""
+            <div class="content-card" style="border-left: 4px solid {border_color};">
+                <h6>{'🔥 ' if is_current else ''}第 {version['version']} 版 - {version['action']}</h6>
+                <p><small>{version['timestamp']}</small></p>
+                <div style="max-height: 100px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+                    {version['content'][:200]}{'...' if len(version['content']) > 200 else ''}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 版本操作按钮
+            col1, col2, col3 = st.columns(3)
+            version_index = len(st.session_state.content_history) - 1 - i
+            
+            with col1:
+                if not is_current and st.button(f"🔄 恢复版本 {version['version']}", 
+                                              key=f"restore_version_{version['version']}", 
+                                              use_container_width=True):
+                    st.session_state.current_version_index = version_index
+                    st.session_state.last_generated_content = version["content"]
+                    st.success(f"✅ 已恢复到第 {version['version']} 版")
+                    st.rerun()
+            
+            with col2:
+                if st.button(f"👁️ 查看完整", key=f"view_version_{version['version']}", use_container_width=True):
+                    st.markdown("**完整内容：**")
+                    st.text_area("", value=version["content"], height=200, key=f"content_view_{version['version']}")
+            
+            with col3:
+                if st.button(f"📋 复制版本", key=f"copy_version_{version['version']}", use_container_width=True):
+                    st.markdown(f"""
+                    <div class="content-card">
+                        <h6>📋 复制第 {version['version']} 版内容</h6>
+                        <textarea id="copy-version-{version['version']}" style="width: 100%; height: 100px;">{version['content']}</textarea>
+                        <button onclick="
+                            var content = document.getElementById('copy-version-{version['version']}');
+                            content.select();
+                            document.execCommand('copy');
+                            alert('第 {version['version']} 版内容已复制！');
+                        " style="background: #ff6b9d; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+                            复制
+                        </button>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            if i < len(st.session_state.content_history) - 1:
+                st.markdown("---")
+
+
+def show_satisfaction_feedback():
+    """显示用户满意度反馈界面和智能回环处理"""
+    if not hasattr(st.session_state, 'last_generated_content') or not st.session_state.last_generated_content:
+        return
+    
+    st.markdown("---")
+    st.markdown("""
+    <div class="main-header" style="font-size: 2rem;">🔄 智能反馈回环</div>
+    <div class="sub-header">根据您的满意度，我可以继续优化或重新生成内容</div>
+    """, unsafe_allow_html=True)
+    
+    # 满意度选择区域
+    st.markdown("""
+    <div class="feature-card">
+        <h5>😊 您对当前文案的满意度如何？</h5>
+        <p>请根据您的实际感受选择，我会基于您的反馈提供相应的服务</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 反馈按钮区域 - 使用动态key避免状态冲突
+    feedback_round = st.session_state.feedback_round
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("😞 不满意", 
+                    key=f"unsatisfied_btn_{feedback_round}", 
+                    type="secondary",
+                    use_container_width=True,
+                    help="重新生成一个全新的改进版本"):
+            st.session_state.feedback_round += 1
+            st.session_state.show_version_history_flag = True
+            handle_user_feedback("不满意")
+    
+    with col2:
+        if st.button("😊 满意", 
+                    key=f"satisfied_btn_{feedback_round}", 
+                    type="primary",
+                    use_container_width=True,
+                    help="内容不错，但可能还有优化空间"):
+            st.session_state.feedback_round += 1
+            st.session_state.show_version_history_flag = True
+            handle_user_feedback("满意")
+    
+    with col3:
+        if st.button("🔧 需要优化", 
+                    key=f"need_optimize_btn_{feedback_round}", 
+                    type="secondary",
+                    use_container_width=True,
+                    help="对内容满意，但希望进一步完善"):
+            st.session_state.feedback_round += 1
+            st.session_state.show_version_history_flag = True
+            handle_user_feedback("需要优化")
+    
+    with col4:
+        if st.button("✅ 完全满意", 
+                    key=f"completely_satisfied_btn_{feedback_round}", 
+                    type="primary",
+                    use_container_width=True,
+                    help="内容完美，无需修改"):
+            st.session_state.feedback_round += 1
+            st.session_state.show_version_history_flag = True
+            handle_user_feedback("不需要优化，已完成")
+    
+    # 显示版本历史（如果有多个版本且已经开始反馈流程）
+    if len(st.session_state.content_history) > 1 and st.session_state.show_version_history_flag:
+        st.markdown("---")
+        show_version_history()
+
+
+def handle_user_feedback(feedback: str):
+    """处理用户反馈并执行相应的智能回环操作"""
+    if not hasattr(st.session_state, 'agent') or not st.session_state.agent:
+        st.error("❌ 智能体未初始化，请先设置智能体")
+        return
+    
+    if not hasattr(st.session_state, 'last_generated_content'):
+        st.error("❌ 没有可处理的内容")
+        return
+    
+    # 获取当前内容和请求
+    current_content = st.session_state.last_generated_content
+    current_request = getattr(st.session_state, 'current_request', None)
+    
+    # 显示反馈处理状态
+    st.markdown(f"""
+    <div class="content-card" style="border-left: 4px solid #17a2b8;">
+        <h5>🔄 处理您的反馈：{feedback}</h5>
+        <p>正在根据您的选择执行相应操作...</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        if feedback == "不满意":
+            # 重新生成内容
+            st.markdown("### 🔄 正在重新生成改进版本...")
+            # 注意：当前内容已经在版本历史中，无需额外保存
+            regenerate_content_with_improvements(current_request, current_content)
+            return  # 避免重复渲染
+            
+        elif feedback == "满意":
+            # 询问是否需要优化
+            st.markdown("""
+            <div class="success-message">
+                🎉 很高兴您满意这个文案！
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div class="feature-card">
+                <h5>🤔 是否需要进一步优化？</h5>
+                <p>虽然您对当前内容满意，但我可以尝试让它变得更加完美</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_opt1, col_opt2 = st.columns(2)
+            with col_opt1:
+                if st.button("🚀 是的，请优化", 
+                           key=f"yes_optimize_{st.session_state.feedback_round}", 
+                           type="primary",
+                           use_container_width=True):
+                    st.session_state.feedback_round += 1
+                    handle_user_feedback("需要优化")
+            
+            with col_opt2:
+                if st.button("✅ 不用了，已经很好", 
+                           key=f"no_optimize_{st.session_state.feedback_round}", 
+                           type="secondary",
+                           use_container_width=True):
+                    st.session_state.feedback_round += 1
+                    handle_user_feedback("不需要优化，已完成")
+                    
+        elif feedback == "需要优化":
+            # 执行智能优化
+            st.markdown("### 🎯 正在智能优化内容...")
+            optimize_current_content(current_content)
+            return  # 避免重复渲染
+            
+        elif feedback == "不需要优化，已完成":
+            # 完成流程
+            st.markdown("""
+            <div class="success-message">
+                🎉 创作完成！感谢您使用小红书文案生成智能体
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div class="content-card">
+                <h5>✨ 创作总结</h5>
+                <p>您的文案已经完成，可以直接使用了！</p>
+                <p>💡 如需创作新的文案，请清空当前内容并开始新的创作流程</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 提供最终操作选项
+            col_final1, col_final2, col_final3 = st.columns(3)
+            with col_final1:
+                if st.button("📋 复制最终文案", key=f"copy_final_{st.session_state.feedback_round}", use_container_width=True):
+                    show_copy_interface(current_content)
+            
+            with col_final2:
+                if st.button("💾 保存文案", key=f"save_final_{st.session_state.feedback_round}", use_container_width=True):
+                    show_save_interface(current_content)
+            
+            with col_final3:
+                if st.button("🆕 开始新创作", key=f"new_creation_{st.session_state.feedback_round}", use_container_width=True):
+                    # 清空当前内容，准备新创作
+                    st.session_state.last_generated_content = ""
+                    if hasattr(st.session_state, 'current_request'):
+                        del st.session_state.current_request
+                    # 清空版本历史和状态
+                    st.session_state.content_history = []
+                    st.session_state.current_version_index = -1
+                    st.session_state.feedback_round = 0
+                    st.session_state.show_version_history_flag = False
+                    st.rerun()
+                    
+    except Exception as e:
+        st.markdown(f"""
+        <div class="error-message">
+            ❌ 处理过程中出现错误：{str(e)}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def regenerate_content_with_improvements(request: ContentRequest, previous_content: str):
+    """重新生成改进版本的内容"""
+    if not request:
+        st.warning("⚠️ 缺少原始请求信息，将基于现有内容重新生成")
+        regenerate_from_existing_content(previous_content)
+        return
+    
+    # 创建生成进度指示器
+    update_progress, progress_container = create_generation_progress()
+    
+    try:
+        if st.session_state.enable_stream:
+            # 流式重新生成
+            update_progress(20, "分析之前的内容...")
+            time.sleep(0.3)
+            
+            update_progress(40, "准备重新创作...")
+            new_content = ""
+            chunk_count = 0
+            max_chunks = 500
+            
+            # 创建显示容器
+            result_placeholder = st.empty()
+            stream_handler = StreamHandler(result_placeholder)
+            
+            try:
+                update_progress(60, "开始重新生成...")
+                
+                for chunk in st.session_state.agent.regenerate_with_improvements_stream(request, previous_content):
+                    if chunk:
+                        new_content += chunk
+                        chunk_count += 1
+                        stream_handler.write(chunk)
+                        
+                        # 更新进度
+                        progress = min(60 + (chunk_count / max_chunks * 30), 90)
+                        update_progress(int(progress), f"重新生成中... ({chunk_count} 个片段)")
+                        
+                        if chunk_count >= max_chunks:
+                            new_content += "\n\n⚠️ 已达到最大生成长度限制"
+                            break
+                
+                update_progress(100, "重新生成完成！")
+                time.sleep(0.5)
+                progress_container.empty()
+                
+                # 完成显示
+                stream_handler.finalize()
+                st.session_state.last_generated_content = new_content
+                # 添加新版本到历史
+                add_content_to_history(new_content, "重新生成")
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+                
+            except Exception as e:
+                progress_container.empty()
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 重新生成失败：{str(e)}
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            # 非流式重新生成
+            update_progress(50, "正在重新生成改进版本...")
+            result = st.session_state.agent.regenerate_with_improvements(request, previous_content)
+            
+            progress_container.empty()
+            
+            if result["success"]:
+                st.session_state.last_generated_content = result["content"]
+                # 添加新版本到历史
+                add_content_to_history(result["content"], "重新生成")
+                st.markdown(f"""
+                <div class="generated-content">
+                    ✨ <strong>重新生成完成</strong><br><br>
+                    {result['content']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+            else:
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 重新生成失败：{result['error']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+    except Exception as e:
+        if 'progress_container' in locals():
+            progress_container.empty()
+        st.markdown(f"""
+        <div class="error-message">
+            ❌ 重新生成过程出错：{str(e)}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def regenerate_from_existing_content(content: str):
+    """基于现有内容重新生成"""
+    # 创建生成进度指示器
+    update_progress, progress_container = create_generation_progress()
+    
+    try:
+        if st.session_state.enable_stream:
+            # 流式重新生成
+            update_progress(20, "分析现有内容...")
+            time.sleep(0.3)
+            
+            update_progress(40, "准备重新创作...")
+            new_content = ""
+            chunk_count = 0
+            max_chunks = 500
+            
+            # 创建显示容器
+            result_placeholder = st.empty()
+            stream_handler = StreamHandler(result_placeholder)
+            
+            try:
+                update_progress(60, "开始重新生成...")
+                
+                for chunk in st.session_state.agent.regenerate_from_content_stream(content):
+                    if chunk:
+                        new_content += chunk
+                        chunk_count += 1
+                        stream_handler.write(chunk)
+                        
+                        # 更新进度
+                        progress = min(60 + (chunk_count / max_chunks * 30), 90)
+                        update_progress(int(progress), f"重新生成中... ({chunk_count} 个片段)")
+                        
+                        if chunk_count >= max_chunks:
+                            new_content += "\n\n⚠️ 已达到最大生成长度限制"
+                            break
+                
+                update_progress(100, "重新生成完成！")
+                time.sleep(0.5)
+                progress_container.empty()
+                
+                # 完成显示
+                stream_handler.finalize()
+                st.session_state.last_generated_content = new_content
+                # 添加新版本到历史
+                add_content_to_history(new_content, "重新生成")
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+                
+            except Exception as e:
+                progress_container.empty()
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 重新生成失败：{str(e)}
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            # 非流式重新生成
+            update_progress(50, "正在重新生成...")
+            result = st.session_state.agent.regenerate_from_content(content)
+            
+            progress_container.empty()
+            
+            if result["success"]:
+                st.session_state.last_generated_content = result["content"]
+                # 添加新版本到历史
+                add_content_to_history(result["content"], "重新生成")
+                st.markdown(f"""
+                <div class="generated-content">
+                    ✨ <strong>重新生成完成</strong><br><br>
+                    {result['content']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+            else:
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 重新生成失败：{result['error']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+    except Exception as e:
+        if 'progress_container' in locals():
+            progress_container.empty()
+        st.markdown(f"""
+        <div class="error-message">
+            ❌ 重新生成过程出错：{str(e)}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def optimize_current_content(content: str):
+    """优化当前内容"""
+    # 创建优化进度指示器
+    update_progress, progress_container = create_generation_progress()
+    
+    try:
+        if st.session_state.enable_stream:
+            # 流式优化
+            update_progress(20, "分析当前内容...")
+            time.sleep(0.3)
+            
+            update_progress(40, "寻找优化点...")
+            optimized_content = ""
+            chunk_count = 0
+            max_chunks = 500
+            
+            # 创建优化显示容器
+            result_placeholder = st.empty()
+            stream_handler = StreamHandler(result_placeholder)
+            
+            try:
+                update_progress(60, "开始优化重写...")
+                
+                for chunk in st.session_state.agent.optimize_content_stream(content):
+                    if chunk:
+                        optimized_content += chunk
+                        chunk_count += 1
+                        stream_handler.write(chunk)
+                        
+                        # 更新进度
+                        progress = min(60 + (chunk_count / max_chunks * 30), 90)
+                        update_progress(int(progress), f"优化中... ({chunk_count} 个片段)")
+                        
+                        if chunk_count >= max_chunks:
+                            optimized_content += "\n\n⚠️ 已达到最大优化长度限制"
+                            break
+                
+                update_progress(100, "优化完成！")
+                time.sleep(0.5)
+                progress_container.empty()
+                
+                # 完成显示
+                stream_handler.finalize()
+                st.session_state.last_generated_content = optimized_content
+                # 添加新版本到历史
+                add_content_to_history(optimized_content, "智能优化")
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+                
+            except Exception as e:
+                progress_container.empty()
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 优化失败：{str(e)}
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            # 非流式优化
+            update_progress(50, "正在优化文案...")
+            result = st.session_state.agent.optimize_content(content)
+            
+            progress_container.empty()
+            
+            if result["success"]:
+                st.session_state.last_generated_content = result["optimized"]
+                # 添加新版本到历史
+                add_content_to_history(result["optimized"], "智能优化")
+                st.markdown(f"""
+                <div class="generated-content">
+                    ✅ <strong>优化完成</strong><br><br>
+                    {result['optimized']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 完成操作并刷新页面
+                finish_content_operation("重新生成", new_content)
+            else:
+                st.markdown(f"""
+                <div class="error-message">
+                    ❌ 优化失败：{result['error']}
+                </div>
+                """, unsafe_allow_html=True)
+                
+    except Exception as e:
+        if 'progress_container' in locals():
+            progress_container.empty()
+        st.markdown(f"""
+        <div class="error-message">
+            ❌ 优化过程出错：{str(e)}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def show_copy_interface(content: str):
+    """显示复制界面"""
+    st.markdown(f"""
+    <div class="content-card">
+        <h5>📋 复制到剪贴板</h5>
+        <textarea id="copy-content-final" style="width: 100%; height: 200px; margin: 10px 0;">{content}</textarea>
+        <button onclick="
+            var content = document.getElementById('copy-content-final');
+            content.select();
+            document.execCommand('copy');
+            alert('内容已复制到剪贴板！');
+        " style="background: #ff6b9d; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+            点击复制
+        </button>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def show_save_interface(content: str):
+    """显示保存界面"""
+    # 生成文件名
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    filename = f"xiaohongshu_final_content_{timestamp}.txt"
+    
+    # 创建下载链接
+    st.download_button(
+        label="📥 下载最终文案",
+        data=content,
+        file_name=filename,
+        mime="text/plain",
+        use_container_width=True
+    )
+    
+    st.success(f"✅ 最终文案已准备下载：{filename}")
 
 
 def stream_generate_content(agent, request: ContentRequest):
@@ -821,6 +1442,9 @@ def content_generation_tab():
         # 保存生成结果到session_state
         if result["success"]:
             st.session_state.last_generated_content = result["content"]
+            st.session_state.current_request = request  # 保存当前请求用于回环
+            # 添加到版本历史
+            add_content_to_history(result["content"], "初始生成")
             
             # 显示生成统计
             content_length = len(result["content"])
@@ -845,158 +1469,43 @@ def content_generation_tab():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # 智能回环 - 用户满意度反馈
+            show_satisfaction_feedback()
         
         # 重置生成状态
         st.session_state.generating = False
     
-    # 内容管理区域 - 增强版
-    if hasattr(st.session_state, 'last_generated_content') and st.session_state.last_generated_content:
+    # 内容预览区域（仅在没有进入回环流程时显示）
+    if hasattr(st.session_state, 'last_generated_content') and st.session_state.last_generated_content and not hasattr(st.session_state, 'in_feedback_loop'):
         st.markdown("---")
         st.markdown("""
-        <div class="main-header" style="font-size: 2rem;">📝 内容管理</div>
-        <div class="sub-header">对生成的内容进行进一步优化和管理</div>
-        """, unsafe_allow_html=True)
-        
-        # 内容预览卡片
-        st.markdown("""
         <div class="content-card">
-            <h5>📄 当前内容预览</h5>
+            <h5>📄 生成内容预览</h5>
         </div>
         """, unsafe_allow_html=True)
         
-        # 显示当前内容的简要信息
-        content_preview = st.session_state.last_generated_content[:200] + "..." if len(st.session_state.last_generated_content) > 200 else st.session_state.last_generated_content
+        # 显示内容预览
+        content_preview = st.session_state.last_generated_content[:300] + "..." if len(st.session_state.last_generated_content) > 300 else st.session_state.last_generated_content
         st.markdown(f"**内容预览:** {content_preview}")
         
-        # 管理按钮区域
-        st.markdown("### 🛠️ 内容操作")
-        col1, col2, col3, col4 = st.columns(4)
+        # 简化的快速操作
+        st.markdown("### 🔧 快速操作")
+        col_quick1, col_quick2, col_quick3 = st.columns(3)
         
-        with col1:
-            if st.button("🎯 智能优化", key="optimize_btn", use_container_width=True):
-                st.markdown("""
-                <div class="content-card" style="border-left: 4px solid #17a2b8;">
-                    <h5>🔄 正在智能优化</h5>
-                    <p>AI正在分析内容并进行优化改进...</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 创建优化进度指示器
-                opt_update_progress, opt_progress_container = create_generation_progress()
-                
-                try:
-                    if st.session_state.enable_stream:
-                        opt_update_progress(20, "分析当前内容...")
-                        time.sleep(0.3)
-                        
-                        opt_update_progress(40, "寻找优化点...")
-                        optimized_content = ""
-                        chunk_count = 0
-                        max_chunks = 500
-                        
-                        # 创建优化显示容器
-                        opt_result_placeholder = st.empty()
-                        opt_stream_handler = StreamHandler(opt_result_placeholder)
-                        
-                        try:
-                            opt_update_progress(60, "开始优化重写...")
-                            
-                            for chunk in st.session_state.agent.optimize_content_stream(st.session_state.last_generated_content):
-                                if chunk:
-                                    optimized_content += chunk
-                                    chunk_count += 1
-                                    opt_stream_handler.write(chunk)
-                                    
-                                    # 更新进度
-                                    progress = min(60 + (chunk_count / max_chunks * 30), 90)
-                                    opt_update_progress(int(progress), f"优化中... ({chunk_count} 个片段)")
-                                    
-                                    if chunk_count >= max_chunks:
-                                        optimized_content += "\n\n⚠️ 已达到最大优化长度限制"
-                                        break
-                            
-                            opt_update_progress(100, "优化完成！")
-                            time.sleep(0.5)
-                            opt_progress_container.empty()
-                            
-                            # 完成显示
-                            opt_stream_handler.finalize()
-                            st.session_state.last_generated_content = optimized_content
-                            
-                        except Exception as e:
-                            optimized_content = f"优化失败：{str(e)}"
-                            opt_progress_container.empty()
-                            st.markdown(f"""
-                            <div class="error-message">
-                                {optimized_content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        opt_update_progress(50, "正在优化文案...")
-                        optimization_result = st.session_state.agent.optimize_content(st.session_state.last_generated_content)
-                        
-                        opt_progress_container.empty()
-                        
-                        if optimization_result["success"]:
-                            st.session_state.last_generated_content = optimization_result["optimized"]
-                            st.markdown(f"""
-                            <div class="generated-content">
-                                ✅ <strong>优化完成</strong><br><br>
-                                {optimization_result['optimized']}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="error-message">
-                                ❌ 优化失败：{optimization_result['error']}
-                            </div>
-                            """, unsafe_allow_html=True)
-                except Exception as e:
-                    opt_progress_container.empty()
-                    st.markdown(f"""
-                    <div class="error-message">
-                        ❌ 优化过程出错：{str(e)}
-                    </div>
-                    """, unsafe_allow_html=True)
+        with col_quick1:
+            if st.button("📋 快速复制", key="quick_copy_btn", use_container_width=True):
+                show_copy_interface(st.session_state.last_generated_content)
         
-        with col2:
-            if st.button("📋 复制内容", key="copy_btn", use_container_width=True):
-                # 创建一个包含JavaScript的复制功能
-                st.markdown(f"""
-                <div class="content-card">
-                    <h5>📋 复制到剪贴板</h5>
-                    <textarea id="copy-content" style="width: 100%; height: 100px; margin: 10px 0;">{st.session_state.last_generated_content}</textarea>
-                    <button onclick="
-                        var content = document.getElementById('copy-content');
-                        content.select();
-                        document.execCommand('copy');
-                        alert('内容已复制到剪贴板！');
-                    " style="background: #ff6b9d; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                        点击复制
-                    </button>
-                </div>
-                """, unsafe_allow_html=True)
+        with col_quick2:
+            if st.button("💾 快速保存", key="quick_save_btn", use_container_width=True):
+                show_save_interface(st.session_state.last_generated_content)
         
-        with col3:
-            if st.button("💾 保存文案", key="save_btn", use_container_width=True):
-                # 生成文件名
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                filename = f"xiaohongshu_content_{timestamp}.txt"
-                
-                # 创建下载链接
-                st.download_button(
-                    label="📥 下载文案文件",
-                    data=st.session_state.last_generated_content,
-                    file_name=filename,
-                    mime="text/plain",
-                    use_container_width=True
-                )
-                
-                st.success(f"✅ 文案已准备下载：{filename}")
-        
-        with col4:
-            if st.button("🗑️ 清空内容", key="clear_content_btn", use_container_width=True):
+        with col_quick3:
+            if st.button("🗑️ 清空重新开始", key="quick_clear_btn", use_container_width=True):
                 st.session_state.last_generated_content = ""
+                if hasattr(st.session_state, 'current_request'):
+                    del st.session_state.current_request
                 st.markdown("""
                 <div class="success-message">
                     ✅ 内容已清空，可以开始新的创作
@@ -1004,15 +1513,6 @@ def content_generation_tab():
                 """, unsafe_allow_html=True)
                 time.sleep(1)
                 st.rerun()
-        
-        # 版本历史（如果有的话）
-        if hasattr(st.session_state, 'content_history') and st.session_state.content_history:
-            with st.expander("📚 历史版本", expanded=False):
-                for i, content in enumerate(reversed(st.session_state.content_history[-5:]), 1):
-                    st.markdown(f"**版本 {i}:** {content[:100]}...")
-                    if st.button(f"恢复版本 {i}", key=f"restore_{i}"):
-                        st.session_state.last_generated_content = content
-                        st.rerun()
 
 
 def template_gallery_tab():
@@ -1457,7 +1957,17 @@ def chat_tab():
             """, unsafe_allow_html=True)
 
 
-
+def finish_content_operation(operation_type: str, content: str):
+    """完成内容操作的通用方法，避免重复调用满意度反馈"""
+    st.markdown(f"""
+    <div class="success-message">
+        ✨ {operation_type}完成！新版本已保存到历史记录，请继续使用反馈按钮
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 延迟1秒后刷新页面，让用户看到成功消息
+    time.sleep(1)
+    st.rerun()
 
 
 def main():

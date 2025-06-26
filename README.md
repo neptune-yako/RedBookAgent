@@ -71,14 +71,18 @@ Qwen3TORedbook/
 │   ├── __init__.py                # 包初始化
 │   ├── xiaohongshu_agent.py       # 主要智能体类
 │   ├── content_templates.py       # 内容模板库
-│   ├── web_interface.py           # Streamlit Web界面
-│   ├── demo.py                    # 命令行演示脚本
-│   └── README.md                  # Agent模块说明
+│   └── web_interface.py           # Streamlit Web界面
 ├── LLM/                           # 大语言模型客户端
 │   ├── ollama_client.py           # Ollama客户端实现
-│   ├── simple_chat.py             # 简单聊天示例
-│   ├── test_connection.py         # 连接测试工具
 │   └── README.md                  # LLM模块说明
+├── docs/                          # 文档目录
+│   ├── README.md                  # 文档索引
+│   ├── features/                  # 功能特性文档
+│   ├── api/                       # API相关文档
+│   └── development/               # 开发记录文档
+├── fastapi_server.py              # FastAPI服务器
+├── start_api.py                   # API启动脚本
+├── start_web.py                   # Web界面启动脚本
 ├── requirements.txt               # 项目依赖包
 └── README.md                     # 项目主说明文档
 ```
@@ -130,14 +134,30 @@ pip install -r requirements.txt
 
 ### 6. 运行应用
 
-#### Web界面版本（推荐）
+#### 🔧 错误检查和修复（推荐）
+如果遇到启动问题，请先运行诊断脚本：
 ```bash
-streamlit run Agent/web_interface.py
+# 检查环境兼容性
+python check_environment.py
+
+# 智能启动服务器（自动处理端口冲突）
+python start_server.py
 ```
 
-#### 命令行版本
+#### Web界面版本（推荐）
 ```bash
-python Agent/demo.py
+python start_web.py
+```
+
+#### API服务版本
+```bash
+python start_api.py
+```
+
+#### 手动启动（如果上述方法有问题）
+```bash
+# 使用自定义端口启动
+python -m uvicorn fastapi_server:app --host 0.0.0.0 --port 8001
 ```
 
 ## 💻 使用指南
@@ -146,7 +166,7 @@ python Agent/demo.py
 
 1. **启动Web界面**
    ```bash
-   streamlit run Agent/web_interface.py
+   python start_web.py
    ```
 
 2. **流式响应配置**
@@ -176,20 +196,20 @@ python Agent/demo.py
    - 获得优化建议
    - 查看改进后的版本，实时观察优化过程
 
-### 命令行使用
+### API服务使用
 
 ```bash
-python Agent/demo.py
+python start_api.py
 ```
 
-功能菜单：
-- `1` - 快速生成文案
-- `2` - 模板库浏览  
-- `3` - 智能对话模式
-- `4` - 内容优化工具
-- `5` - 热门主题推荐
-- `6` - 批量生成示例
-- `0` - 退出程序
+访问API文档：http://localhost:8000/docs
+
+主要接口：
+- `/generate` - 文案生成
+- `/optimize` - 内容优化  
+- `/chat` - 智能对话
+- `/feedback` - 反馈处理
+- `/history` - 版本历史
 
 ### Python代码调用
 
@@ -357,9 +377,54 @@ graph TB
 
 ## 🐛 故障排除
 
+### 🚨 启动前检查
+运行我们提供的诊断脚本：
+```bash
+# 检查环境兼容性和依赖
+python check_environment.py
+
+# 使用智能启动脚本（推荐）
+python start_server.py
+```
+
 ### 常见问题
 
-#### 1. Ollama连接失败
+#### 1. 端口占用错误
+```
+❌ 错误：[Errno 10048] 通常每个套接字地址只允许使用一次
+```
+**自动解决方案：**
+```bash
+# 使用智能启动脚本，自动检测并处理端口冲突
+python start_server.py
+```
+
+**手动解决方案：**
+```bash
+# 查找占用8000端口的进程
+netstat -ano | findstr :8000
+
+# 结束进程（替换<PID>为实际进程号）
+taskkill /F /PID <PID>
+
+# 或使用其他端口
+python -m uvicorn fastapi_server:app --host 0.0.0.0 --port 8001
+```
+
+#### 2. 类型定义错误
+```
+❌ 错误：AttributeError: '_SpecialForm' object has no attribute 'replace'
+```
+**解决方案：**
+```bash
+# 运行环境检查
+python check_environment.py
+
+# 如果仍有问题，升级Python和相关包
+pip install --upgrade pydantic fastapi typing-extensions
+```
+
+#### 3. Ollama连接失败
 ```
 ❌ 错误：无法连接到Ollama服务
 ```
@@ -368,7 +433,7 @@ graph TB
 - 确认端口11434未被占用
 - 检查防火墙设置
 
-#### 2. 模型不存在
+#### 4. 模型不存在
 ```
 ❌ 错误：模型qwen3-redbook-q8:latest不存在
 ```
@@ -377,7 +442,7 @@ graph TB
 ollama pull qwen3-redbook-q8:latest
 ```
 
-#### 3. 依赖包冲突
+#### 5. 依赖包冲突
 ```
 ❌ 错误：ImportError或版本冲突
 ```
@@ -387,7 +452,7 @@ pip install --upgrade pip
 pip install -r requirements.txt --force-reinstall
 ```
 
-#### 4. Streamlit启动失败
+#### 6. Streamlit启动失败
 ```
 ❌ 错误：streamlit命令未找到
 ```
@@ -395,6 +460,21 @@ pip install -r requirements.txt --force-reinstall
 ```bash
 pip install streamlit>=1.28.0
 ```
+
+#### 7. Swagger/OpenAPI错误
+```
+❌ 错误：Fetch error Internal Server Error /openapi.json
+```
+**解决方案：**
+```bash
+# 使用修复版服务器（推荐）
+python -m uvicorn fastapi_server_fixed:app --host 0.0.0.0 --port 8000
+
+# 或使用智能启动脚本（自动选择修复版）
+python start_server.py
+```
+
+**说明：** 修复版服务器解决了OpenAPI模式生成时的依赖循环问题，通过延迟导入Agent模块避免了类型定义冲突。
 
 ### 性能优化建议
 
@@ -462,6 +542,22 @@ pip install streamlit>=1.28.0
 ## 📄 许可证
 
 本项目采用 [MIT许可证](LICENSE)。
+
+## 📚 文档中心
+
+### 📖 详细文档
+- **[文档中心](docs/README.md)** - 完整的项目文档索引
+- **[功能特性](docs/features/FEATURES.md)** - 项目核心功能详解
+- **[FastAPI后端](docs/api/FASTAPI_README.md)** - FastAPI版本部署和API文档
+- **[智能反馈回环](docs/features/INTELLIGENT_LOOP_README.md)** - 核心交互功能详解
+- **[版本历史管理](docs/features/VERSION_HISTORY_FEATURE.md)** - 内容版本控制功能
+
+### 🔧 模块文档
+- **[Agent模块](docs/agent_module.md)** - 智能体核心模块说明
+- **[LLM模块](docs/llm_module.md)** - 大语言模型集成模块说明
+
+### 🛠️ 开发记录
+- **[开发记录](docs/development/)** - 功能开发和问题修复的详细过程
 
 ## 📞 支持与联系
 

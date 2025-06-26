@@ -21,7 +21,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 
 class ContentCategory(Enum):
@@ -52,6 +52,8 @@ class ContentRequest:
 
 class OllamaLangChainLLM(LLM):
     """将Ollama客户端适配为LangChain的LLM接口"""
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     ollama_client: OllamaClient = Field(default_factory=lambda: OllamaClient())
     enable_stream: bool = Field(default=True)
@@ -390,6 +392,243 @@ class XiaohongshuAgent:
         
         # 使用流式生成器
         return self.ollama_client.generate_stream(optimization_query)
+
+    def intelligent_loop(self, content: str, user_feedback: str, content_request: ContentRequest = None):
+        """智能体回环处理
+        
+        Args:
+            content: 当前生成的内容
+            user_feedback: 用户反馈 ("不满意", "满意", "需要优化", "重新生成")
+            content_request: 原始内容请求，用于重新生成
+            
+        Returns:
+            Dict: 处理结果
+        """
+        try:
+            if user_feedback == "不满意" or user_feedback == "重新生成":
+                # 用户不满意，重新生成内容
+                if content_request:
+                    return self.regenerate_with_improvements(content_request, content)
+                else:
+                    # 如果没有原始请求，尝试从内容中推断并重新生成
+                    return self.regenerate_from_content(content)
+                    
+            elif user_feedback == "满意":
+                # 用户满意，询问是否需要优化
+                return {
+                    "success": True,
+                    "action": "ask_optimization",
+                    "message": "很高兴您满意这个文案！是否需要我进一步优化内容？",
+                    "options": ["需要优化", "不需要优化，已完成"]
+                }
+                
+            elif user_feedback == "需要优化":
+                # 用户需要优化，执行智能优化
+                return self.optimize_content(content)
+                
+            elif user_feedback == "不需要优化，已完成":
+                # 用户完全满意，结束流程
+                return {
+                    "success": True,
+                    "action": "completed",
+                    "message": "创作完成！如需要新的文案，请开始新的创作流程。",
+                    "final_content": content
+                }
+                
+            else:
+                # 未知反馈，提供帮助
+                return {
+                    "success": False,
+                    "error": "未识别的反馈类型",
+                    "message": "请选择：不满意、满意、需要优化 或 不需要优化，已完成"
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "处理过程中出现错误，请重试"
+            }
+    
+    def regenerate_with_improvements(self, request: ContentRequest, previous_content: str):
+        """基于用户不满意重新生成改进版本"""
+        try:
+            # 分析之前的内容并生成改进提示
+            improvement_prompt = f"""
+基于以下需求重新生成小红书文案，需要避免之前内容的不足：
+
+原始需求：
+- 分类：{request.category.value}
+- 主题：{request.topic}
+- 语气风格：{request.tone}
+- 长度：{request.length}
+- 目标受众：{request.target_audience}
+
+之前生成的内容：
+{previous_content}
+
+请重新创作，要求：
+1. 保持主题和基本要求不变
+2. 换一个全新的角度和表达方式
+3. 增加更多吸引力和创意
+4. 确保内容质量更高
+5. 带emoji、分段清晰
+"""
+            
+            if request.keywords:
+                improvement_prompt += f"- 关键词：{', '.join(request.keywords)}\n"
+            
+            if request.special_requirements:
+                improvement_prompt += f"- 特殊要求：{request.special_requirements}\n"
+            
+            # 处理思考模式
+            if not self.enable_thinking:
+                improvement_prompt += "/no_think"
+            
+            result = self.ollama_client.generate(improvement_prompt, stream=self.enable_stream)
+            
+            return {
+                "success": True,
+                "action": "regenerated",
+                "content": result,
+                "message": "已重新生成改进版本，请查看是否满意"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "action": "error"
+            }
+    
+    def regenerate_from_content(self, content: str):
+        """从现有内容推断需求并重新生成"""
+        try:
+            regeneration_prompt = f"""
+请分析以下小红书文案，然后生成一个全新的改进版本：
+
+现有内容：
+{content}
+
+要求：
+1. 保持相同的主题和目标
+2. 完全重新创作，不要重复现有表达
+3. 提升内容的吸引力和质量
+4. 保持小红书平台特色
+5. 带emoji、分段清晰
+
+请生成全新的改进版本。
+"""
+            
+            # 处理思考模式
+            if not self.enable_thinking:
+                regeneration_prompt += "/no_think"
+            
+            result = self.ollama_client.generate(regeneration_prompt, stream=self.enable_stream)
+            
+            return {
+                "success": True,
+                "action": "regenerated", 
+                "content": result,
+                "message": "已基于原内容重新生成改进版本"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "action": "error"
+            }
+    
+    def intelligent_loop_stream(self, content: str, user_feedback: str, content_request: ContentRequest = None):
+        """流式智能体回环处理"""
+        try:
+            if user_feedback == "不满意" or user_feedback == "重新生成":
+                # 重新生成流式版本
+                if content_request:
+                    return self.regenerate_with_improvements_stream(content_request, content)
+                else:
+                    return self.regenerate_from_content_stream(content)
+                    
+            elif user_feedback == "需要优化":
+                # 流式优化
+                return self.optimize_content_stream(content)
+                
+            else:
+                # 对于其他情况，返回简单的生成器
+                def simple_response():
+                    if user_feedback == "满意":
+                        yield "很高兴您满意这个文案！是否需要我进一步优化内容？"
+                    elif user_feedback == "不需要优化，已完成":
+                        yield "创作完成！如需要新的文案，请开始新的创作流程。"
+                    else:
+                        yield "请选择：不满意、满意、需要优化 或 不需要优化，已完成"
+                
+                return simple_response()
+                
+        except Exception as e:
+            def error_response():
+                yield f"处理过程中出现错误：{str(e)}"
+            return error_response()
+    
+    def regenerate_with_improvements_stream(self, request: ContentRequest, previous_content: str):
+        """流式重新生成改进版本"""
+        improvement_prompt = f"""
+基于以下需求重新生成小红书文案，需要避免之前内容的不足：
+
+原始需求：
+- 分类：{request.category.value}
+- 主题：{request.topic}
+- 语气风格：{request.tone}
+- 长度：{request.length}
+- 目标受众：{request.target_audience}
+
+之前生成的内容：
+{previous_content}
+
+请重新创作，要求：
+1. 保持主题和基本要求不变
+2. 换一个全新的角度和表达方式
+3. 增加更多吸引力和创意
+4. 确保内容质量更高
+5. 带emoji、分段清晰
+"""
+        
+        if request.keywords:
+            improvement_prompt += f"- 关键词：{', '.join(request.keywords)}\n"
+        
+        if request.special_requirements:
+            improvement_prompt += f"- 特殊要求：{request.special_requirements}\n"
+        
+        # 处理思考模式
+        if not self.enable_thinking:
+            improvement_prompt += "/no_think"
+        
+        return self.ollama_client.generate_stream(improvement_prompt)
+    
+    def regenerate_from_content_stream(self, content: str):
+        """流式从现有内容重新生成"""
+        regeneration_prompt = f"""
+请分析以下小红书文案，然后生成一个全新的改进版本：
+
+现有内容：
+{content}
+
+要求：
+1. 保持相同的主题和目标
+2. 完全重新创作，不要重复现有表达
+3. 提升内容的吸引力和质量
+4. 保持小红书平台特色
+5. 带emoji、分段清晰
+
+请生成全新的改进版本。
+"""
+        
+        # 处理思考模式
+        if not self.enable_thinking:
+            regeneration_prompt += "/no_think"
+        
+        return self.ollama_client.generate_stream(regeneration_prompt)
 
 
 def main():

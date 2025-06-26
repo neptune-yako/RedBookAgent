@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小红书智能体 SSE 客户端</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: #e60050;
+            border-bottom: 2px solid #e60050;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        .button {
+            background-color: #e60050;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+        
+        .button:hover {
+            background-color: #cc0045;
+        }
+        
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .button.secondary {
+            background-color: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.processing {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        
+        .chunk {
+            display: inline;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .stats {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .tabs {
+            display: flex;
+            background-color: #f1f3f4;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background-color: #e60050;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .connection-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            transition: background-color 0.3s;
+        }
+        
+        .connection-dot.connected {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌟 小红书智能体 SSE 客户端</h1>
+            <p>基于Server-Sent Events的实时流式通信</p>
+        </div>
+        
+        <div class="connection-info">
+            <div id="connectionDot" class="connection-dot"></div>
+            <span id="connectionStatus">未连接</span>
+            <button id="connectBtn" class="button">连接</button>
+            <button id="disconnectBtn" class="button secondary" disabled>断开</button>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="generate">📝 生成文案</div>
+            <div class="tab" data-tab="chat">💬 对话</div>
+            <div class="tab" data-tab="optimize">✨ 优化内容</div>
+            <div class="tab" data-tab="status">📊 连接状态</div>
+        </div>
+        
+        <!-- 生成文案 -->
+        <div id="generate" class="tab-content active">
+            <div class="form-group">
+                <label for="category">内容分类：</label>
+                <select id="category">
+                    <option value="美妆护肤">美妆护肤</option>
+                    <option value="时尚穿搭">时尚穿搭</option>
+                    <option value="美食探店" selected>美食探店</option>
+                    <option value="旅行攻略">旅行攻略</option>
+                    <option value="生活方式">生活方式</option>
+                    <option value="健身运动">健身运动</option>
+                    <option value="家居装饰">家居装饰</option>
+                    <option value="学习分享">学习分享</option>
+                    <option value="职场干货">职场干货</option>
+                    <option value="好物推荐">好物推荐</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="topic">主题内容：</label>
+                <input type="text" id="topic" placeholder="例如：新开的日式料理店体验" value="新开的日式料理店体验">
+            </div>
+            
+            <div class="form-group">
+                <label for="tone">语调风格：</label>
+                <select id="tone">
+                    <option value="活泼可爱" selected>活泼可爱</option>
+                    <option value="温馨治愈">温馨治愈</option>
+                    <option value="专业详细">专业详细</option>
+                    <option value="幽默搞笑">幽默搞笑</option>
+                    <option value="简洁明了">简洁明了</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="keywords">关键词（用逗号分隔）：</label>
+                <input type="text" id="keywords" placeholder="例如：日式料理,新店,美味" value="日式料理,新店,美味">
+            </div>
+            
+            <div class="form-group">
+                <label for="requirements">特殊要求：</label>
+                <textarea id="requirements" placeholder="例如：要有个人体验感">要有个人体验感</textarea>
+            </div>
+            
+            <button id="generateBtn" class="button">🚀 开始生成</button>
+            <button id="stopGenerateBtn" class="button secondary" disabled>⏹️ 停止</button>
+            
+            <div id="generateOutput" class="output"></div>
+            <div id="generateStats" class="stats"></div>
+        </div>
+        
+        <!-- 对话 -->
+        <div id="chat" class="tab-content">
+            <div class="form-group">
+                <label for="chatMessage">消息：</label>
+                <textarea id="chatMessage" placeholder="输入你想说的话...">你好，我想要一些写小红书文案的技巧</textarea>
+            </div>
+            
+            <button id="chatBtn" class="button">💬 发送消息</button>
+            <button id="stopChatBtn" class="button secondary" disabled>⏹️ 停止</button>
+            
+            <div id="chatOutput" class="output"></div>
+            <div id="chatStats" class="stats"></div>
+        </div>
+        
+        <!-- 优化内容 -->
+        <div id="optimize" class="tab-content">
+            <div class="form-group">
+                <label for="optimizeContent">待优化内容：</label>
+                <textarea id="optimizeContent" placeholder="粘贴需要优化的小红书文案..." style="height: 120px;">今天去了一家新开的日式料理店，感觉还不错。店里的装修很好看，食物也挺美味的。推荐大家可以去试试。</textarea>
+            </div>
+            
+            <button id="optimizeBtn" class="button">✨ 开始优化</button>
+            <button id="stopOptimizeBtn" class="button secondary" disabled>⏹️ 停止</button>
+            
+            <div id="optimizeOutput" class="output"></div>
+            <div id="optimizeStats" class="stats"></div>
+        </div>
+        
+        <!-- 连接状态 -->
+        <div id="status" class="tab-content">
+            <h3>📊 连接状态信息</h3>
+            <div id="statusInfo" class="output" style="height: auto; min-height: 100px;"></div>
+            
+            <h3>📋 事件日志</h3>
+            <div id="eventLog" class="output"></div>
+            
+            <button id="clearLogBtn" class="button secondary">🗑️ 清空日志</button>
+            <button id="refreshStatusBtn" class="button">🔄 刷新状态</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let eventSource = null;
+        let currentRequest = null;
+        
+        // DOM 元素
+        const connectionDot = document.getElementById('connectionDot');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        
+        // 标签页切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                
+                // 更新标签页状态
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(targetTab).classList.add('active');
+            });
+        });
+        
+        // 连接管理
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionDot.classList.add('connected');
+                connectionStatus.textContent = '已连接';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                connectionDot.classList.remove('connected');
+                connectionStatus.textContent = '未连接';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+        
+        function createSSEConnection() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const userId = 'web_client_' + Date.now();
+            
+            // 使用fetch发送POST请求建立SSE连接
+            fetch(`${API_BASE_URL}/sse/connect`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    connection_type: 'web'
+                })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                eventSource = new EventSource(`${API_BASE_URL}/sse/connect`);
+                
+                eventSource.onopen = function() {
+                    updateConnectionStatus(true);
+                    addEventLog('连接', '✅ SSE连接建立成功');
+                };
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleSSEMessage(event.type || 'message', data);
+                    } catch (e) {
+                        addEventLog('消息', `📦 收到原始消息: ${event.data}`);
+                    }
+                };
+                
+                eventSource.addEventListener('connected', function(event) {
+                    const data = JSON.parse(event.data);
+                    addEventLog('连接', `🔗 连接确认: ${data.connection_id}`);
+                });
+                
+                eventSource.addEventListener('heartbeat', function(event) {
+                    const data = JSON.parse(event.data);
+                    addEventLog('心跳', `💓 心跳: ${new Date(data.timestamp).toLocaleTimeString()}`);
+                });
+                
+                eventSource.addEventListener('error', function(event) {
+                    const data = JSON.parse(event.data);
+                    addEventLog('错误', `❌ 错误: ${data.message}`);
+                });
+                
+                eventSource.onerror = function() {
+                    updateConnectionStatus(false);
+                    addEventLog('连接', '❌ SSE连接错误');
+                };
+            }).catch(error => {
+                addEventLog('连接', `❌ 连接失败: ${error.message}`);
+            });
+        }
+        
+        function closeSSEConnection() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateConnectionStatus(false);
+                addEventLog('连接', '👋 SSE连接已断开');
+            }
+        }
+        
+        // 事件日志
+        function addEventLog(type, message) {
+            const eventLog = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            eventLog.textContent += `[${timestamp}] ${type}: ${message}\n`;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        // SSE消息处理
+        function handleSSEMessage(event, data) {
+            addEventLog('消息', `📨 ${event}: ${JSON.stringify(data)}`);
+        }
+        
+        // 生成文案
+        function generateContent() {
+            const requestData = {
+                category: document.getElementById('category').value,
+                topic: document.getElementById('topic').value,
+                tone: document.getElementById('tone').value,
+                length: '中等',
+                keywords: document.getElementById('keywords').value.split(',').map(k => k.trim()).filter(k => k),
+                target_audience: '年轻女性',
+                special_requirements: document.getElementById('requirements').value,
+                user_id: 'web_client_' + Date.now()
+            };
+            
+            const output = document.getElementById('generateOutput');
+            const stats = document.getElementById('generateStats');
+            const generateBtn = document.getElementById('generateBtn');
+            const stopBtn = document.getElementById('stopGenerateBtn');
+            
+            output.textContent = '';
+            stats.textContent = '';
+            generateBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            let chunkCount = 0;
+            let totalLength = 0;
+            let startTime = Date.now();
+            
+            fetch(`${API_BASE_URL}/generate/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function processStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            generateBtn.disabled = false;
+                            stopBtn.disabled = true;
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'chunk') {
+                                        const textChunk = data.chunk;
+                                        const span = document.createElement('span');
+                                        span.className = 'chunk';
+                                        span.textContent = textChunk;
+                                        output.appendChild(span);
+                                        
+                                        chunkCount++;
+                                        totalLength += textChunk.length;
+                                        
+                                        const elapsed = (Date.now() - startTime) / 1000;
+                                        stats.textContent = `📊 块数: ${chunkCount} | 字符: ${totalLength} | 耗时: ${elapsed.toFixed(1)}s`;
+                                        
+                                        output.scrollTop = output.scrollHeight;
+                                    } else if (data.type === 'complete') {
+                                        generateBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                        stats.textContent += ' | ✅ 完成';
+                                    } else if (data.type === 'error') {
+                                        output.textContent += `\n\n❌ 错误: ${data.message}`;
+                                        generateBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                    }
+                                } catch (e) {
+                                    // 忽略解析错误
+                                }
+                            }
+                        }
+                        
+                        processStream();
+                    }).catch(error => {
+                        output.textContent += `\n\n❌ 流处理错误: ${error.message}`;
+                        generateBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    });
+                }
+                
+                processStream();
+                
+            }).catch(error => {
+                output.textContent = `❌ 生成失败: ${error.message}`;
+                generateBtn.disabled = false;
+                stopBtn.disabled = true;
+            });
+        }
+        
+        // 对话
+        function sendChat() {
+            const message = document.getElementById('chatMessage').value;
+            if (!message.trim()) return;
+            
+            const requestData = {
+                message: message,
+                user_id: 'web_client_' + Date.now()
+            };
+            
+            const output = document.getElementById('chatOutput');
+            const stats = document.getElementById('chatStats');
+            const chatBtn = document.getElementById('chatBtn');
+            const stopBtn = document.getElementById('stopChatBtn');
+            
+            output.textContent = `👤 用户: ${message}\n\n🤖 AI: `;
+            stats.textContent = '';
+            chatBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            let chunkCount = 0;
+            let totalLength = 0;
+            let startTime = Date.now();
+            
+            fetch(`${API_BASE_URL}/chat/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function processStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            chatBtn.disabled = false;
+                            stopBtn.disabled = true;
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'chunk') {
+                                        const textChunk = data.chunk;
+                                        output.textContent += textChunk;
+                                        
+                                        chunkCount++;
+                                        totalLength += textChunk.length;
+                                        
+                                        const elapsed = (Date.now() - startTime) / 1000;
+                                        stats.textContent = `📊 块数: ${chunkCount} | 字符: ${totalLength} | 耗时: ${elapsed.toFixed(1)}s`;
+                                        
+                                        output.scrollTop = output.scrollHeight;
+                                    } else if (data.type === 'complete') {
+                                        chatBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                        stats.textContent += ' | ✅ 完成';
+                                    } else if (data.type === 'error') {
+                                        output.textContent += `\n\n❌ 错误: ${data.message}`;
+                                        chatBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                    }
+                                } catch (e) {
+                                    // 忽略解析错误
+                                }
+                            }
+                        }
+                        
+                        processStream();
+                    }).catch(error => {
+                        output.textContent += `\n\n❌ 流处理错误: ${error.message}`;
+                        chatBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    });
+                }
+                
+                processStream();
+                
+            }).catch(error => {
+                output.textContent += `\n\n❌ 对话失败: ${error.message}`;
+                chatBtn.disabled = false;
+                stopBtn.disabled = true;
+            });
+        }
+        
+        // 优化内容
+        function optimizeContent() {
+            const content = document.getElementById('optimizeContent').value;
+            if (!content.trim()) return;
+            
+            const requestData = {
+                content: content,
+                user_id: 'web_client_' + Date.now()
+            };
+            
+            const output = document.getElementById('optimizeOutput');
+            const stats = document.getElementById('optimizeStats');
+            const optimizeBtn = document.getElementById('optimizeBtn');
+            const stopBtn = document.getElementById('stopOptimizeBtn');
+            
+            output.textContent = '';
+            stats.textContent = '';
+            optimizeBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            let chunkCount = 0;
+            let totalLength = 0;
+            let startTime = Date.now();
+            
+            fetch(`${API_BASE_URL}/optimize/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function processStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            optimizeBtn.disabled = false;
+                            stopBtn.disabled = true;
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'chunk') {
+                                        const textChunk = data.chunk;
+                                        const span = document.createElement('span');
+                                        span.className = 'chunk';
+                                        span.textContent = textChunk;
+                                        output.appendChild(span);
+                                        
+                                        chunkCount++;
+                                        totalLength += textChunk.length;
+                                        
+                                        const elapsed = (Date.now() - startTime) / 1000;
+                                        stats.textContent = `📊 块数: ${chunkCount} | 字符: ${totalLength} | 耗时: ${elapsed.toFixed(1)}s`;
+                                        
+                                        output.scrollTop = output.scrollHeight;
+                                    } else if (data.type === 'complete') {
+                                        optimizeBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                        stats.textContent += ' | ✅ 完成';
+                                    } else if (data.type === 'error') {
+                                        output.textContent += `\n\n❌ 错误: ${data.message}`;
+                                        optimizeBtn.disabled = false;
+                                        stopBtn.disabled = true;
+                                    }
+                                } catch (e) {
+                                    // 忽略解析错误
+                                }
+                            }
+                        }
+                        
+                        processStream();
+                    }).catch(error => {
+                        output.textContent += `\n\n❌ 流处理错误: ${error.message}`;
+                        optimizeBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    });
+                }
+                
+                processStream();
+                
+            }).catch(error => {
+                output.textContent = `❌ 优化失败: ${error.message}`;
+                optimizeBtn.disabled = false;
+                stopBtn.disabled = true;
+            });
+        }
+        
+        // 刷新状态
+        function refreshStatus() {
+            const statusInfo = document.getElementById('statusInfo');
+            const userId = 'web_client_status';
+            
+            fetch(`${API_BASE_URL}/sse/status/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    statusInfo.textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(error => {
+                    statusInfo.textContent = `获取状态失败: ${error.message}`;
+                });
+        }
+        
+        // 事件监听
+        connectBtn.addEventListener('click', createSSEConnection);
+        disconnectBtn.addEventListener('click', closeSSEConnection);
+        
+        document.getElementById('generateBtn').addEventListener('click', generateContent);
+        document.getElementById('chatBtn').addEventListener('click', sendChat);
+        document.getElementById('optimizeBtn').addEventListener('click', optimizeContent);
+        document.getElementById('refreshStatusBtn').addEventListener('click', refreshStatus);
+        
+        document.getElementById('clearLogBtn').addEventListener('click', () => {
+            document.getElementById('eventLog').textContent = '';
+        });
+        
+        // 页面加载时刷新状态
+        window.addEventListener('load', refreshStatus);
+    </script>
+</body>
+</html> 
