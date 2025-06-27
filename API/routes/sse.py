@@ -5,12 +5,13 @@ SSE连接相关路由
 import asyncio
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sse_starlette.sse import EventSourceResponse
 
 from ..models import ApiResponse, SSEConnectionRequest
 from ..sse import SSEMessage, sse_manager
 from ..config import logger, SSE_CONFIG
+from ..i18n import Language, get_message, get_success_message
 
 router = APIRouter(prefix="/sse", tags=["sse"])
 
@@ -54,12 +55,12 @@ async def create_sse_connection(request: SSEConnectionRequest):
 
 
 @router.get("/status/{user_id}")
-async def get_sse_status(user_id: str):
+async def get_sse_status(user_id: str, language: Language = Query(default=Language.ZH_CN, description="接口语言")):
     """获取用户的SSE连接状态"""
     connections = sse_manager.get_user_connections(user_id)
     return ApiResponse(
         success=True,
-        message="获取连接状态成功",
+        message=get_success_message("sse_connection_status_retrieved", language),
         data={
             "user_id": user_id,
             "active_connections": len(connections),

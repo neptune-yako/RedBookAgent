@@ -10,8 +10,10 @@ except ImportError:
     from typing_extensions import Union
 from pydantic import BaseModel, Field, ConfigDict
 
+from .i18n import I18nMixin, Language
 
-class ContentGenerationRequest(BaseModel):
+
+class ContentGenerationRequest(I18nMixin):
     category: str = Field(
         ..., 
         description="内容分类",
@@ -78,19 +80,40 @@ class ContentGenerationRequest(BaseModel):
         description="用户ID - 用于会话管理和内容历史记录",
         example="user_001"
     )
+    enable_thinking: bool = Field(
+        default=True,
+        description="""思考模式开关 - 控制AI是否显示思考过程
+        • True - 启用思考模式，显示AI的思考和推理过程
+        • False - 关闭思考模式，直接输出结果，会在prompt后添加'/no_think'""",
+        example=True
+    )
 
 
-class ContentOptimizationRequest(BaseModel):
+class ContentOptimizationRequest(I18nMixin):
     content: str = Field(..., description="待优化的内容")
     user_id: str = Field(..., description="用户ID")
+    enable_thinking: bool = Field(
+        default=True,
+        description="""思考模式开关 - 控制AI是否显示思考过程
+        • True - 启用思考模式，显示AI的思考和推理过程
+        • False - 关闭思考模式，直接输出结果，会在prompt后添加'/no_think'""",
+        example=True
+    )
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(I18nMixin):
     message: str = Field(..., description="用户消息")
     user_id: str = Field(..., description="用户ID")
+    enable_thinking: bool = Field(
+        default=True,
+        description="""思考模式开关 - 控制AI是否显示思考过程
+        • True - 启用思考模式，显示AI的思考和推理过程
+        • False - 关闭思考模式，直接输出结果，会在prompt后添加'/no_think'""",
+        example=True
+    )
 
 
-class FeedbackRequest(BaseModel):
+class FeedbackRequest(I18nMixin):
     content: str = Field(
         ..., 
         description="当前内容 - 需要处理的文案内容",
@@ -117,12 +140,12 @@ class FeedbackRequest(BaseModel):
     )
 
 
-class VersionRestoreRequest(BaseModel):
+class VersionRestoreRequest(I18nMixin):
     user_id: str = Field(..., description="用户ID")
     version_index: int = Field(..., description="版本索引")
 
 
-class SSEConnectionRequest(BaseModel):
+class SSEConnectionRequest(I18nMixin):
     user_id: str = Field(..., description="用户ID")
     connection_type: str = Field(default="general", description="连接类型")
 

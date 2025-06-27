@@ -255,6 +255,13 @@
                 <textarea id="requirements" placeholder="例如：要有个人体验感">要有个人体验感</textarea>
             </div>
             
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="generateThinking" checked> 
+                    🧠 启用思考模式 (显示AI思考过程)
+                </label>
+            </div>
+            
             <button id="generateBtn" class="button">🚀 开始生成</button>
             <button id="stopGenerateBtn" class="button secondary" disabled>⏹️ 停止</button>
             
@@ -269,6 +276,13 @@
                 <textarea id="chatMessage" placeholder="输入你想说的话...">你好，我想要一些写小红书文案的技巧</textarea>
             </div>
             
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="chatThinking" checked> 
+                    🧠 启用思考模式 (显示AI思考过程)
+                </label>
+            </div>
+            
             <button id="chatBtn" class="button">💬 发送消息</button>
             <button id="stopChatBtn" class="button secondary" disabled>⏹️ 停止</button>
             
@@ -281,6 +295,13 @@
             <div class="form-group">
                 <label for="optimizeContent">待优化内容：</label>
                 <textarea id="optimizeContent" placeholder="粘贴需要优化的小红书文案..." style="height: 120px;">今天去了一家新开的日式料理店，感觉还不错。店里的装修很好看，食物也挺美味的。推荐大家可以去试试。</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="optimizeThinking" checked> 
+                    🧠 启用思考模式 (显示AI思考过程)
+                </label>
             </div>
             
             <button id="optimizeBtn" class="button">✨ 开始优化</button>
@@ -437,7 +458,8 @@
                 keywords: document.getElementById('keywords').value.split(',').map(k => k.trim()).filter(k => k),
                 target_audience: '年轻女性',
                 special_requirements: document.getElementById('requirements').value,
-                user_id: 'web_client_' + Date.now()
+                user_id: 'web_client_' + Date.now(),
+                enable_thinking: document.getElementById('generateThinking').checked
             };
             
             const output = document.getElementById('generateOutput');
@@ -537,7 +559,8 @@
             
             const requestData = {
                 message: message,
-                user_id: 'web_client_' + Date.now()
+                user_id: 'web_client_' + Date.now(),
+                enable_thinking: document.getElementById('chatThinking').checked
             };
             
             const output = document.getElementById('chatOutput');
@@ -634,7 +657,8 @@
             
             const requestData = {
                 content: content,
-                user_id: 'web_client_' + Date.now()
+                user_id: 'web_client_' + Date.now(),
+                enable_thinking: document.getElementById('optimizeThinking').checked
             };
             
             const output = document.getElementById('optimizeOutput');

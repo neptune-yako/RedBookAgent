@@ -1,0 +1,18 @@
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Collecting hypercorn
+  Downloading https://mirrors.aliyun.com/pypi/packages/0e/3b/dfa13a8d96aa24e40ea74a975a9906cfdc2ab2f4e3b498862a57052f04eb/hypercorn-0.17.3-py3-none-any.whl (61 kB)
+Requirement already satisfied: exceptiongroup>=1.1.0 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (1.3.0)
+Requirement already satisfied: h11 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (0.14.0)
+Requirement already satisfied: h2>=3.1.0 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (4.2.0)
+Collecting priority (from hypercorn)
+  Downloading https://mirrors.aliyun.com/pypi/packages/5e/5f/82c8074f7e84978129347c2c6ec8b6c59f3584ff1a20bc3c940a3e061790/priority-2.0.0-py3-none-any.whl (8.9 kB)
+Collecting taskgroup (from hypercorn)
+  Downloading https://mirrors.aliyun.com/pypi/packages/d1/b1/74babcc824a57904e919f3af16d86c08b524c0691504baf038ef2d7f655c/taskgroup-0.2.2-py2.py3-none-any.whl (14 kB)
+Requirement already satisfied: tomli in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (2.2.1)
+Requirement already satisfied: typing_extensions in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (4.14.0)
+Requirement already satisfied: wsproto>=0.14.0 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from hypercorn) (1.2.0)
+Requirement already satisfied: hyperframe<7,>=6.1 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from h2>=3.1.0->hypercorn) (6.1.0)
+Requirement already satisfied: hpack<5,>=4.1 in c:\users\15118800032\.conda\envs\metagpt\lib\site-packages (from h2>=3.1.0->hypercorn) (4.1.0)
+Installing collected packages: priority, taskgroup, hypercorn
+
+Successfully installed hypercorn-0.17.3 priority-2.0.0 taskgroup-0.2.2

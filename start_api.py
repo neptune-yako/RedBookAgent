@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 FastAPI服务启动脚本
+支持HTTP/1.1和HTTP/2.0模式
 """
 
 import uvicorn
@@ -59,6 +60,14 @@ def check_python_version():
     print(f"✅ Python版本检查通过: {sys.version}")
     return True
 
+def check_http2_support():
+    """检查是否支持HTTP/2.0"""
+    try:
+        import hypercorn
+        return True
+    except ImportError:
+        return False
+
 def main():
     """启动FastAPI服务"""
     logging.basicConfig(level=logging.INFO)
@@ -73,10 +82,20 @@ def main():
     if not check_dependencies():
         sys.exit(1)
     
-    print("🚀 启动小红书文案生成智能体 FastAPI 服务...")
+    # 检查HTTP/2.0支持
+    has_http2 = check_http2_support()
+    if has_http2:
+        print("🎯 检测到HTTP/2.0支持（Hypercorn）")
+        print("💡 建议使用: python start_http2.py 启动HTTP/2.0服务器")
+        print("📝 当前脚本将使用HTTP/1.1模式（Uvicorn）")
+        print("=" * 50)
+    
+    print("🚀 启动小红书文案生成智能体 FastAPI 服务 (HTTP/1.1)...")
     print("📝 访问 http://localhost:8000 查看API")
     print("📚 访问 http://localhost:8000/docs 查看API文档")
     print("🔧 访问 http://localhost:8000/redoc 查看ReDoc文档")
+    if has_http2:
+        print("🌟 升级提示: 使用 'python start_http2.py' 体验HTTP/2.0")
     print("=" * 50)
     
     try:

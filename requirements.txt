@@ -9,4 +9,15 @@ fastapi>=0.108.0,<0.110.0
 uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
 sse-starlette>=1.8.2
-sseclient-py>=1.7.2 
+sseclient-py>=1.7.2
+
+# HTTP/2.0 和 HTTP/3 支持
+hypercorn>=0.17.0
+httpx[http2]>=0.24.0
+h2>=4.1.0
+h11>=0.14.0
+hpack>=4.0.0
+
+# SSL/TLS 支持
+cryptography>=3.4.0
+pyopenssl>=23.0.0 

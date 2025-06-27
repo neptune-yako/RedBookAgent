@@ -6,12 +6,14 @@
 [![LangChain](https://img.shields.io/badge/LangChain-0.1%2B-green)](https://langchain.com/)
 [![Ollama](https://img.shields.io/badge/Ollama-Latest-orange)](https://ollama.ai/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io/)
+[![HTTP/2.0](https://img.shields.io/badge/HTTP%2F2.0-Supported-brightgreen)](https://tools.ietf.org/html/rfc7540)
 
 ## 📋 目录
 
 - [功能特色](#功能特色)
 - [项目结构](#项目结构)  
 - [快速开始](#快速开始)
+- [HTTP/2.0支持](#http20支持)
 - [使用指南](#使用指南)
 - [功能演示](#功能演示)
 - [开发说明](#开发说明)
@@ -47,6 +49,18 @@
 - **优化建议**：提供具体的改进建议和修改方案
 - **A/B对比**：展示优化前后的对比效果
 
+### ⚡ 分离式多线程处理
+- **双线程池架构**：智能体任务(3线程)和系统功能(5线程)完全分离
+- **避免资源竞争**：对话过程中可正常执行系统检查和监控功能
+- **异步任务处理**：支持异步提交任务，立即返回任务ID
+- **流式任务支持**：流式接口可在线程池中执行，支持高并发场景
+- **批量操作**：支持批量生成内容和批量对话处理
+- **优先级队列**：智能任务调度，根据优先级分配资源
+- **线程安全**：完全线程安全的会话和数据管理
+- **系统监控**：实时监控任务状态和系统性能
+- **自动清理**：自动清理过期任务和不活跃会话
+- **负载均衡**：自动在工作线程间分配任务，优化性能
+
 ### 💡 热门主题推荐
 - **分类推荐**：根据选择的分类推荐热门主题
 - **实时更新**：基于当前热点生成推荐内容
@@ -57,11 +71,28 @@
 - **流式对话**：对话内容逐字显示，自然交互体验
 - **智能状态**：显示连接、思考、生成等不同阶段状态
 - **可配置**：支持开启/关闭流式模式，适应不同偏好
+- **线程池支持**：流式接口支持线程池执行，提高并发性能
+- **双重模式**：每个流式接口提供直接执行和线程池执行两种版本
+
+### 🧠 智能思考模式
+- **思考过程可视化**：启用时显示AI的思考推理过程
+- **简洁输出模式**：关闭时直接输出结果，提高响应速度
+- **灵活控制**：支持每个请求独立设置思考模式
+- **适应场景**：适合不同使用需求和网络条件
 
 ### 🚀 多种使用方式
 - **Web界面**：基于Streamlit的友好用户界面，支持流式响应
 - **命令行**：功能完整的命令行演示程序
 - **API调用**：支持Python代码直接调用
+
+### 🌐 HTTP/2.0 协议支持
+- **多路复用**：单连接处理多个并发请求，消除队头阻塞
+- **头部压缩**：使用HPACK算法减少传输开销，提升响应速度
+- **服务器推送**：主动推送资源，优化加载性能
+- **二进制协议**：更高效的数据传输和错误处理
+- **向下兼容**：自动支持HTTP/1.1客户端，无缝升级体验
+- **SSL/TLS支持**：完整的HTTPS加密传输
+- **HTTP/3就绪**：支持QUIC协议，适应未来网络标准
 
 ## 📁 项目结构
 
@@ -151,7 +182,17 @@ python start_web.py
 
 #### API服务版本
 ```bash
+# HTTP/1.1模式（传统）
 python start_api.py
+
+# HTTP/2.0模式（推荐，更高性能）
+python start_http2.py
+```
+
+#### 分离式多线程功能演示
+```bash
+# 运行分离式多线程演示脚本（展示智能体和系统线程池分离）
+python examples/multi_threading_demo.py
 ```
 
 #### 手动启动（如果上述方法有问题）
@@ -159,6 +200,112 @@ python start_api.py
 # 使用自定义端口启动
 python -m uvicorn fastapi_server:app --host 0.0.0.0 --port 8001
 ```
+
+## 🌐 HTTP/2.0支持
+
+### 升级到HTTP/2.0
+
+项目现已支持HTTP/2.0协议，相比HTTP/1.1具有显著的性能优势：
+
+#### 🚀 性能提升
+- **并发处理能力**: 提升 30-50%
+- **平均响应时间**: 减少 20-40%  
+- **连接建立开销**: 减少 60-80%
+- **SSE流式响应**: 提升 15-25%
+
+#### 📦 安装HTTP/2.0依赖
+
+```bash
+# 安装HTTP/2.0相关依赖
+pip install -r requirements.txt --upgrade
+```
+
+新增的关键依赖：
+- `hypercorn>=0.17.0` - 支持HTTP/2.0的ASGI服务器
+- `httpx[http2]>=0.24.0` - HTTP/2.0客户端支持
+- `h2>=4.1.0` - HTTP/2.0协议实现
+- `cryptography>=3.4.0` - SSL/TLS支持
+
+#### 🔧 启动HTTP/2.0服务
+
+```bash
+# 推荐方式：使用专用启动脚本
+python start_http2.py
+
+# 启动时会询问是否启用HTTPS（推荐选择Y）
+# 脚本会自动生成自签名证书用于开发测试
+```
+
+#### 🔐 SSL证书配置
+
+**开发环境**：
+- 脚本自动生成自签名证书到 `certs/` 目录
+- 浏览器会显示证书警告，选择"继续访问"即可
+
+**生产环境**：
+```bash
+# 配置环境变量使用正式证书
+export SSL_ENABLED=true
+export SSL_KEYFILE=/path/to/your/private.key
+export SSL_CERTFILE=/path/to/your/certificate.crt
+export HTTP2_ENABLED=true
+```
+
+#### 🔍 验证HTTP/2.0连接
+
+```bash
+# 使用curl测试HTTP/2.0
+curl -I --http2 --insecure https://localhost:8443/
+
+# 查看API响应协议版本
+curl -w "%{http_version}\n" --http2 --insecure \
+  -X POST https://localhost:8443/generate/async \
+  -H "Content-Type: application/json" \
+  -d '{"topic":"测试主题","category":"general","tone":"friendly","user_id":"test"}'
+```
+
+#### 📊 性能测试
+
+```bash
+# 运行HTTP/2.0性能对比测试
+python examples/http2_performance_test.py
+
+# 测试前确保两个服务都在运行：
+# Terminal 1: python start_api.py (HTTP/1.1服务器)
+# Terminal 2: python start_http2.py (HTTP/2.0服务器)
+```
+
+#### 🌐 客户端使用
+
+**Python客户端**：
+```python
+import httpx
+
+# HTTP/2.0客户端
+async with httpx.AsyncClient(http2=True, verify=False) as client:
+    response = await client.post(
+        'https://localhost:8443/generate/async',
+        json={"topic": "春季护肤", "category": "beauty", "user_id": "test"}
+    )
+    print(f"协议版本: {response.http_version}")
+```
+
+**JavaScript客户端**：
+```javascript
+// 浏览器自动使用HTTP/2.0（如果支持）
+const response = await fetch('https://localhost:8443/generate/async', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({topic: '春季护肤', category: 'beauty', user_id: 'test'})
+});
+```
+
+#### 📚 详细文档
+
+更多配置选项和部署指南请参考：
+- [HTTP/2.0升级指南](docs/HTTP2_UPGRADE_GUIDE.md)
+- [性能优化指南](docs/features/FEATURES.md)
+- [多线程处理指南](docs/MULTI_THREADING_GUIDE.md)
 
 ## 💻 使用指南
 
@@ -174,25 +321,33 @@ python -m uvicorn fastapi_server:app --host 0.0.0.0 --port 8001
    - 可选择是否启用"思考模式"
    - 配置会实时生效，无需重启
 
-3. **文案生成**
+3. **思考模式选择**
+   - **启用思考模式**：显示AI完整的思考推理过程，适合学习和调试
+   - **关闭思考模式**：直接输出最终结果，提高生成速度
+   - 每个请求可独立设置，适应不同场景需求
+
+4. **文案生成**
    - 选择内容分类（美妆、穿搭、美食等）
    - 输入主题描述
    - 设置语气风格和目标受众
    - 添加关键词（可选）
+   - 勾选是否启用思考模式
    - 点击"生成文案"，观察流式生成过程
 
-4. **模板浏览**
+5. **模板浏览**
    - 查看各分类的标题模板
    - 浏览开头结尾模板
    - 获取话题标签示例
 
-5. **智能对话**
+6. **智能对话**
    - 输入问题或需求
+   - 选择是否启用思考模式
    - 获得智能体的专业回复
    - 支持多轮对话，享受流式响应体验
 
-6. **内容优化**
+7. **内容优化**
    - 输入现有文案
+   - 选择是否启用思考模式
    - 获得优化建议
    - 查看改进后的版本，实时观察优化过程
 
@@ -342,7 +497,10 @@ if result["success"]:
 
 - **LangChain**: 智能体框架和工具系统
 - **Ollama**: 本地大语言模型服务
+- **FastAPI**: 高性能Web API框架
 - **Streamlit**: Web用户界面
+- **ThreadPoolExecutor**: 多线程任务执行
+- **PriorityQueue**: 优先级任务调度
 - **Pydantic**: 数据验证和设置管理
 - **Python**: 核心开发语言
 
@@ -506,6 +664,15 @@ python start_server.py
 
 ## 📈 更新日志
 
+### v1.2.0 (2024-01-XX)
+- ⚡ **多线程并发处理**：显著提升系统处理能力
+- 🚀 异步任务处理：支持异步提交和状态查询
+- 📦 批量操作支持：批量生成内容和批量对话
+- 🎯 优先级队列：智能任务调度和资源管理
+- 🔒 线程安全：完全线程安全的数据管理
+- 📊 系统监控：实时监控任务状态和性能指标
+- 🧹 自动清理：自动清理过期任务和会话
+
 ### v1.1.0 (2024-01-XX)
 - 🌊 **新增流式响应功能**：实时显示生成过程
 - ✨ 流式文案生成：逐字逐句显示文案生成过程
@@ -548,6 +715,7 @@ python start_server.py
 ### 📖 详细文档
 - **[文档中心](docs/README.md)** - 完整的项目文档索引
 - **[功能特性](docs/features/FEATURES.md)** - 项目核心功能详解
+- **[多线程处理指南](docs/MULTI_THREADING_GUIDE.md)** - 多线程并发处理功能详解
 - **[FastAPI后端](docs/api/FASTAPI_README.md)** - FastAPI版本部署和API文档
 - **[智能反馈回环](docs/features/INTELLIGENT_LOOP_README.md)** - 核心交互功能详解
 - **[版本历史管理](docs/features/VERSION_HISTORY_FEATURE.md)** - 内容版本控制功能

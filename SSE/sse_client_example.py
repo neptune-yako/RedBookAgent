@@ -223,7 +223,7 @@ def demo_content_generation():
     
     client = XiaohongshuSSEClient()
     
-    # 生成请求
+    # 生成请求 - 启用思考模式
     request_data = {
         "category": "美食探店",
         "topic": "新开的日式料理店体验",
@@ -232,7 +232,8 @@ def demo_content_generation():
         "keywords": ["日式料理", "新店", "美味"],
         "target_audience": "年轻女性",
         "special_requirements": "要有个人体验感",
-        "user_id": "demo_user_001"
+        "user_id": "demo_user_001",
+        "enable_thinking": True  # 启用思考模式，显示AI思考过程
     }
     
     print("📝 正在生成内容...")
@@ -269,7 +270,8 @@ def demo_chat():
     
     request_data = {
         "message": "你好，我想要一些写小红书文案的技巧",
-        "user_id": "demo_user_001"
+        "user_id": "demo_user_001",
+        "enable_thinking": False  # 关闭思考模式，直接输出结果
     }
     
     print("🤖 AI回复:")
@@ -288,6 +290,62 @@ def demo_chat():
         elif event_type == "complete":
             print(f"\n\n✅ 对话完成!")
         
+        elif event_type == "error":
+            print(f"\n❌ 错误: {data.get('message', '')}")
+            break
+
+
+def demo_thinking_mode():
+    """演示思考模式的差异"""
+    print("\n🧠 演示思考模式差异")
+    print("=" * 50)
+    
+    client = XiaohongshuSSEClient()
+    
+    # 测试内容优化 - 启用思考模式
+    print("1️⃣ 启用思考模式的优化:")
+    print("-" * 30)
+    
+    request_data_thinking = {
+        "content": "这家店很好吃，环境也不错",
+        "user_id": "demo_user_001",
+        "enable_thinking": True  # 启用思考模式
+    }
+    
+    for message in client.optimize_content_stream(request_data_thinking):
+        event_type = message.get("event", "unknown")
+        data = message.get("data", {})
+        
+        if event_type == "chunk":
+            chunk = data.get('chunk', '')
+            print(chunk, end='', flush=True)
+        elif event_type == "complete":
+            print("\n✅ 思考模式优化完成!\n")
+            break
+        elif event_type == "error":
+            print(f"\n❌ 错误: {data.get('message', '')}")
+            break
+    
+    # 测试内容优化 - 关闭思考模式
+    print("2️⃣ 关闭思考模式的优化:")
+    print("-" * 30)
+    
+    request_data_no_thinking = {
+        "content": "这家店很好吃，环境也不错",
+        "user_id": "demo_user_002",
+        "enable_thinking": False  # 关闭思考模式
+    }
+    
+    for message in client.optimize_content_stream(request_data_no_thinking):
+        event_type = message.get("event", "unknown")
+        data = message.get("data", {})
+        
+        if event_type == "chunk":
+            chunk = data.get('chunk', '')
+            print(chunk, end='', flush=True)
+        elif event_type == "complete":
+            print("\n✅ 无思考模式优化完成!")
+            break
         elif event_type == "error":
             print(f"\n❌ 错误: {data.get('message', '')}")
             break
@@ -338,6 +396,9 @@ def main():
         
         # 演示对话
         demo_chat()
+        
+        # 演示思考模式差异
+        demo_thinking_mode()
         
         # 演示连接管理
         demo_connection_management()

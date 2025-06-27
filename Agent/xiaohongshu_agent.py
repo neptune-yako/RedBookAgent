@@ -14,6 +14,12 @@ from enum import Enum
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from LLM.ollama_client import OllamaClient
+from .i18n_agent import (
+    Language, 
+    get_prompt_template, 
+    format_keywords_section, 
+    format_special_requirements_section
+)
 
 from langchain.agents import initialize_agent, AgentType
 from langchain.tools import Tool
@@ -48,6 +54,7 @@ class ContentRequest:
     keywords: List[str] = None
     target_audience: str = "年轻女性"
     special_requirements: str = ""
+    language: str = "zh-CN"  # 新增语言参数
 
 
 class OllamaLangChainLLM(LLM):
@@ -121,21 +128,21 @@ class XiaohongshuAgent:
         
         def generate_title_tool(query: str) -> str:
             """生成小红书标题的工具"""
-            prompt = f"""
-作为小红书爆款标题专家，请为以下内容生成3个吸引人的标题：
-
-内容描述：{query}
-
-要求：
-1. 标题要有吸引力和话题性
-2. 适当使用emoji表情
-3. 长度控制在15-25字
-4. 符合小红书用户习惯
-5. 每个标题风格要有差异
-6.带emoji、分段清晰
-
-请生成3个标题，用序号分别标注。
-"""
+            # 从查询中提取语言信息，如果没有则使用默认语言
+            language = Language.ZH_CN
+            if "|language:" in query:
+                query_parts = query.split("|language:")
+                if len(query_parts) > 1:
+                    lang_code = query_parts[1].strip()
+                    try:
+                        language = Language(lang_code)
+                        query = query_parts[0].strip()
+                    except ValueError:
+                        pass
+            
+            prompt_template = get_prompt_template("title_generation", language)
+            prompt = prompt_template.format(query=query)
+            
             # 处理思考模式
             if not self.enable_thinking:
                 prompt += "/no_think"
@@ -144,21 +151,21 @@ class XiaohongshuAgent:
         
         def generate_content_tool(query: str) -> str:
             """生成小红书正文内容的工具"""
-            prompt = f"""
-作为小红书内容创作专家，请为以下需求生成完整的小红书文案：
-
-需求：{query}
-
-要求：
-1. 开头要有吸引人的hook
-2. 内容要有价值和实用性
-3. 带emoji、分段清晰
-4. 结尾要有互动引导
-5. 整体风格要符合小红书调性
-6. 字数控制在200-500字
-
-请生成完整的小红书文案。
-"""
+            # 从查询中提取语言信息
+            language = Language.ZH_CN
+            if "|language:" in query:
+                query_parts = query.split("|language:")
+                if len(query_parts) > 1:
+                    lang_code = query_parts[1].strip()
+                    try:
+                        language = Language(lang_code)
+                        query = query_parts[0].strip()
+                    except ValueError:
+                        pass
+            
+            prompt_template = get_prompt_template("content_writing", language)
+            prompt = prompt_template.format(query=query)
+            
             # 处理思考模式
             if not self.enable_thinking:
                 prompt += "/no_think"
@@ -167,20 +174,21 @@ class XiaohongshuAgent:
         
         def generate_hashtags_tool(query: str) -> str:
             """生成小红书话题标签的工具"""
-            prompt = f"""
-作为小红书话题标签专家，请为以下内容生成相关的话题标签：
-
-内容：{query}
-
-要求：
-1. 生成8-12个相关话题标签
-2. 包含热门标签和精准标签
-3. 标签要符合小红书规范
-4. 用#号标注每个标签
-5. 按照热度和相关性排序
-
-请生成话题标签列表。
-"""
+            # 从查询中提取语言信息
+            language = Language.ZH_CN
+            if "|language:" in query:
+                query_parts = query.split("|language:")
+                if len(query_parts) > 1:
+                    lang_code = query_parts[1].strip()
+                    try:
+                        language = Language(lang_code)
+                        query = query_parts[0].strip()
+                    except ValueError:
+                        pass
+            
+            prompt_template = get_prompt_template("hashtag_generation", language)
+            prompt = prompt_template.format(query=query)
+            
             # 处理思考模式
             if not self.enable_thinking:
                 prompt += "/no_think"
@@ -189,21 +197,21 @@ class XiaohongshuAgent:
         
         def content_optimization_tool(query: str) -> str:
             """内容优化建议工具"""
-            prompt = f"""
-作为小红书内容优化专家，请对以下文案提供优化建议：
-
-文案内容：{query}
-
-请从以下角度提供优化建议：
-1. 标题吸引力
-2. 内容结构
-3. 用词优化
-4. emoji使用
-5. 互动性提升
-6. SEO优化
-
-请提供具体的优化建议和修改建议。
-"""
+            # 从查询中提取语言信息
+            language = Language.ZH_CN
+            if "|language:" in query:
+                query_parts = query.split("|language:")
+                if len(query_parts) > 1:
+                    lang_code = query_parts[1].strip()
+                    try:
+                        language = Language(lang_code)
+                        query = query_parts[0].strip()
+                    except ValueError:
+                        pass
+            
+            prompt_template = get_prompt_template("content_optimization", language)
+            prompt = prompt_template.format(content=query)
+            
             # 处理思考模式
             if not self.enable_thinking:
                 prompt += "/no_think"
@@ -256,24 +264,28 @@ class XiaohongshuAgent:
     def generate_complete_post(self, request: ContentRequest) -> Dict[str, Any]:
         """生成完整的小红书文案"""
         
-        # 构建详细的需求描述
-        requirement = f"""
-请为以下需求生成完整的小红书文案：
-
-分类：{request.category.value}
-主题：{request.topic}
-语气风格：{request.tone}
-长度：{request.length}
-目标受众：{request.target_audience}
-"""
+        try:
+            # 获取语言参数
+            language = Language(request.language) if hasattr(request, 'language') and request.language else Language.ZH_CN
+        except ValueError:
+            language = Language.ZH_CN
         
-        if request.keywords:
-            requirement += f"关键词：{', '.join(request.keywords)}\n"
+        # 使用国际化模板构建需求描述
+        prompt_template = get_prompt_template("content_generation", language)
         
-        if request.special_requirements:
-            requirement += f"特殊要求：{request.special_requirements}\n"
+        # 格式化关键词和特殊要求
+        keywords_section = format_keywords_section(request.keywords, language)
+        special_requirements_section = format_special_requirements_section(request.special_requirements, language)
         
-        requirement += "\n请分别生成标题、正文内容和话题标签。"
+        requirement = prompt_template.format(
+            category=request.category.value,
+            topic=request.topic,
+            tone=request.tone,
+            length=request.length,
+            target_audience=request.target_audience,
+            keywords_section=keywords_section,
+            special_requirements_section=special_requirements_section
+        )
         
         try:
             # 使用智能体生成内容
@@ -291,10 +303,19 @@ class XiaohongshuAgent:
                 "request": request.__dict__
             }
     
-    def optimize_content(self, content: str) -> Dict[str, Any]:
+    def optimize_content(self, content: str, language: str = "zh-CN") -> Dict[str, Any]:
         """优化现有内容"""
         try:
-            optimization_query = f"请优化以下小红书文案：\n\n{content}"
+            # 获取语言参数
+            try:
+                lang = Language(language)
+            except ValueError:
+                lang = Language.ZH_CN
+            
+            # 使用国际化模板
+            prompt_template = get_prompt_template("content_optimization", lang)
+            optimization_query = prompt_template.format(content=content)
+            
             result = self.agent.run(optimization_query)
             
             return {
@@ -309,13 +330,40 @@ class XiaohongshuAgent:
                 "original": content
             }
     
-    def chat(self, message: str) -> str:
+    def chat(self, message: str, language: str = "zh-CN") -> str:
         """与智能体对话"""
         try:
-            response = self.agent.run(message)
+            # 为聊天消息添加语言上下文
+            try:
+                lang = Language(language)
+            except ValueError:
+                lang = Language.ZH_CN
+            
+            # 根据语言添加对话上下文
+            if lang == Language.EN_US:
+                contextualized_message = f"Please respond in English. User message: {message}"
+            elif lang == Language.ZH_TW:
+                contextualized_message = f"請用繁體中文回答。用戶訊息：{message}"
+            elif lang == Language.JA_JP:
+                contextualized_message = f"日本語で回答してください。ユーザーメッセージ：{message}"
+            else:
+                contextualized_message = f"请用简体中文回答。用户消息：{message}"
+            
+            response = self.agent.run(contextualized_message)
             return response
         except Exception as e:
-            return f"对话出错：{str(e)}"
+            # 根据语言返回错误消息
+            error_messages = {
+                Language.ZH_CN: f"对话出错：{str(e)}",
+                Language.EN_US: f"Chat error: {str(e)}",
+                Language.ZH_TW: f"對話出錯：{str(e)}",
+                Language.JA_JP: f"チャットエラー：{str(e)}"
+            }
+            try:
+                lang = Language(language)
+                return error_messages.get(lang, error_messages[Language.ZH_CN])
+            except ValueError:
+                return error_messages[Language.ZH_CN]
     
     def update_config(self, enable_stream: bool = None, enable_thinking: bool = None):
         """更新配置"""
@@ -327,42 +375,66 @@ class XiaohongshuAgent:
             self.enable_thinking = enable_thinking
             self.llm.enable_thinking = enable_thinking
     
-
-
-    def generate_complete_post_stream(self, request: ContentRequest):
+    def generate_complete_post_stream(self, request: ContentRequest, enable_thinking: bool = None):
         """流式生成完整的小红书文案"""
         
-        # 构建详细的需求描述
-        requirement = f"""
-请为以下需求生成完整的小红书文案：
-
-分类：{request.category.value}
-主题：{request.topic}
-语气风格：{request.tone}
-长度：{request.length}
-目标受众：{request.target_audience}
-"""
+        try:
+            # 获取语言参数
+            language = Language(request.language) if hasattr(request, 'language') and request.language else Language.ZH_CN
+        except ValueError:
+            language = Language.ZH_CN
         
-        if request.keywords:
-            requirement += f"关键词：{', '.join(request.keywords)}\n"
+        # 使用国际化模板构建需求描述
+        prompt_template = get_prompt_template("content_generation", language)
         
-        if request.special_requirements:
-            requirement += f"特殊要求：{request.special_requirements}\n"
+        # 格式化关键词和特殊要求
+        keywords_section = format_keywords_section(request.keywords, language)
+        special_requirements_section = format_special_requirements_section(request.special_requirements, language)
         
-        requirement += "\n请分别生成标题、正文内容和话题标签。"
+        requirement = prompt_template.format(
+            category=request.category.value,
+            topic=request.topic,
+            tone=request.tone,
+            length=request.length,
+            target_audience=request.target_audience,
+            keywords_section=keywords_section,
+            special_requirements_section=special_requirements_section
+        )
         
-        # 处理思考模式
-        if not self.enable_thinking:
+        # 处理思考模式 - 优先使用参数，否则使用实例设置
+        thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
+        if not thinking_enabled:
             requirement += "/no_think"
         
         # 使用流式生成器
         return self.ollama_client.generate_stream(requirement)
-    
-    def chat_stream(self, message: str):
+
+    def chat_stream(self, message: str, language: str = "zh-CN", enable_thinking: bool = None):
         """流式对话"""
         try:
+            # 为聊天消息添加语言上下文
+            try:
+                lang = Language(language)
+            except ValueError:
+                lang = Language.ZH_CN
+            
+            # 根据语言添加对话上下文
+            if lang == Language.EN_US:
+                contextualized_message = f"Please respond in English. User message: {message}"
+            elif lang == Language.ZH_TW:
+                contextualized_message = f"請用繁體中文回答。用戶訊息：{message}"
+            elif lang == Language.JA_JP:
+                contextualized_message = f"日本語で回答してください。ユーザーメッセージ：{message}"
+            else:
+                contextualized_message = f"请用简体中文回答。用户消息：{message}"
+            
+            # 处理思考模式 - 优先使用参数，否则使用实例设置
+            thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
+            if not thinking_enabled and not contextualized_message.endswith("/no_think"):
+                contextualized_message += "/no_think"
+            
             # 构建对话消息
-            messages = [{"role": "user", "content": message}]
+            messages = [{"role": "user", "content": contextualized_message}]
             
             # 如果有对话历史，添加到消息中
             chat_history = self.memory.chat_memory.messages
@@ -379,15 +451,35 @@ class XiaohongshuAgent:
             return self.ollama_client.chat_stream(messages)
         except Exception as e:
             def error_generator():
-                yield f"对话出错：{str(e)}"
+                # 根据语言返回错误消息
+                error_messages = {
+                    Language.ZH_CN: f"对话出错：{str(e)}",
+                    Language.EN_US: f"Chat error: {str(e)}",
+                    Language.ZH_TW: f"對話出錯：{str(e)}",
+                    Language.JA_JP: f"チャットエラー：{str(e)}"
+                }
+                try:
+                    lang = Language(language)
+                    yield error_messages.get(lang, error_messages[Language.ZH_CN])
+                except ValueError:
+                    yield error_messages[Language.ZH_CN]
             return error_generator()
-    
-    def optimize_content_stream(self, content: str):
+
+    def optimize_content_stream(self, content: str, language: str = "zh-CN", enable_thinking: bool = None):
         """流式优化现有内容"""
-        optimization_query = f"请优化以下小红书文案：\n\n{content}"
+        try:
+            # 获取语言参数
+            lang = Language(language)
+        except ValueError:
+            lang = Language.ZH_CN
         
-        # 处理思考模式
-        if not self.enable_thinking:
+        # 使用国际化模板
+        prompt_template = get_prompt_template("content_optimization", lang)
+        optimization_query = prompt_template.format(content=content)
+        
+        # 处理思考模式 - 优先使用参数，否则使用实例设置
+        thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
+        if not thinking_enabled:
             optimization_query += "/no_think"
         
         # 使用流式生成器
@@ -453,33 +545,29 @@ class XiaohongshuAgent:
     def regenerate_with_improvements(self, request: ContentRequest, previous_content: str):
         """基于用户不满意重新生成改进版本"""
         try:
-            # 分析之前的内容并生成改进提示
-            improvement_prompt = f"""
-基于以下需求重新生成小红书文案，需要避免之前内容的不足：
-
-原始需求：
-- 分类：{request.category.value}
-- 主题：{request.topic}
-- 语气风格：{request.tone}
-- 长度：{request.length}
-- 目标受众：{request.target_audience}
-
-之前生成的内容：
-{previous_content}
-
-请重新创作，要求：
-1. 保持主题和基本要求不变
-2. 换一个全新的角度和表达方式
-3. 增加更多吸引力和创意
-4. 确保内容质量更高
-5. 带emoji、分段清晰
-"""
+            # 获取语言参数
+            try:
+                language = Language(request.language) if hasattr(request, 'language') and request.language else Language.ZH_CN
+            except ValueError:
+                language = Language.ZH_CN
             
-            if request.keywords:
-                improvement_prompt += f"- 关键词：{', '.join(request.keywords)}\n"
+            # 使用国际化模板
+            prompt_template = get_prompt_template("regeneration_with_improvements", language)
             
-            if request.special_requirements:
-                improvement_prompt += f"- 特殊要求：{request.special_requirements}\n"
+            # 格式化关键词和特殊要求
+            keywords_section = format_keywords_section(request.keywords, language)
+            special_requirements_section = format_special_requirements_section(request.special_requirements, language)
+            
+            improvement_prompt = prompt_template.format(
+                category=request.category.value,
+                topic=request.topic,
+                tone=request.tone,
+                length=request.length,
+                target_audience=request.target_audience,
+                keywords_section=keywords_section,
+                special_requirements_section=special_requirements_section,
+                previous_content=previous_content
+            )
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -501,24 +589,18 @@ class XiaohongshuAgent:
                 "action": "error"
             }
     
-    def regenerate_from_content(self, content: str):
+    def regenerate_from_content(self, content: str, language: str = "zh-CN"):
         """从现有内容推断需求并重新生成"""
         try:
-            regeneration_prompt = f"""
-请分析以下小红书文案，然后生成一个全新的改进版本：
-
-现有内容：
-{content}
-
-要求：
-1. 保持相同的主题和目标
-2. 完全重新创作，不要重复现有表达
-3. 提升内容的吸引力和质量
-4. 保持小红书平台特色
-5. 带emoji、分段清晰
-
-请生成全新的改进版本。
-"""
+            # 获取语言参数
+            try:
+                lang = Language(language)
+            except ValueError:
+                lang = Language.ZH_CN
+            
+            # 使用国际化模板
+            prompt_template = get_prompt_template("regeneration_from_content", lang)
+            regeneration_prompt = prompt_template.format(content=content)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -573,32 +655,29 @@ class XiaohongshuAgent:
     
     def regenerate_with_improvements_stream(self, request: ContentRequest, previous_content: str):
         """流式重新生成改进版本"""
-        improvement_prompt = f"""
-基于以下需求重新生成小红书文案，需要避免之前内容的不足：
-
-原始需求：
-- 分类：{request.category.value}
-- 主题：{request.topic}
-- 语气风格：{request.tone}
-- 长度：{request.length}
-- 目标受众：{request.target_audience}
-
-之前生成的内容：
-{previous_content}
-
-请重新创作，要求：
-1. 保持主题和基本要求不变
-2. 换一个全新的角度和表达方式
-3. 增加更多吸引力和创意
-4. 确保内容质量更高
-5. 带emoji、分段清晰
-"""
+        # 获取语言参数
+        try:
+            language = Language(request.language) if hasattr(request, 'language') and request.language else Language.ZH_CN
+        except ValueError:
+            language = Language.ZH_CN
         
-        if request.keywords:
-            improvement_prompt += f"- 关键词：{', '.join(request.keywords)}\n"
+        # 使用国际化模板
+        prompt_template = get_prompt_template("regeneration_with_improvements", language)
         
-        if request.special_requirements:
-            improvement_prompt += f"- 特殊要求：{request.special_requirements}\n"
+        # 格式化关键词和特殊要求
+        keywords_section = format_keywords_section(request.keywords, language)
+        special_requirements_section = format_special_requirements_section(request.special_requirements, language)
+        
+        improvement_prompt = prompt_template.format(
+            category=request.category.value,
+            topic=request.topic,
+            tone=request.tone,
+            length=request.length,
+            target_audience=request.target_audience,
+            keywords_section=keywords_section,
+            special_requirements_section=special_requirements_section,
+            previous_content=previous_content
+        )
         
         # 处理思考模式
         if not self.enable_thinking:
@@ -606,23 +685,17 @@ class XiaohongshuAgent:
         
         return self.ollama_client.generate_stream(improvement_prompt)
     
-    def regenerate_from_content_stream(self, content: str):
+    def regenerate_from_content_stream(self, content: str, language: str = "zh-CN"):
         """流式从现有内容重新生成"""
-        regeneration_prompt = f"""
-请分析以下小红书文案，然后生成一个全新的改进版本：
-
-现有内容：
-{content}
-
-要求：
-1. 保持相同的主题和目标
-2. 完全重新创作，不要重复现有表达
-3. 提升内容的吸引力和质量
-4. 保持小红书平台特色
-5. 带emoji、分段清晰
-
-请生成全新的改进版本。
-"""
+        # 获取语言参数
+        try:
+            lang = Language(language)
+        except ValueError:
+            lang = Language.ZH_CN
+        
+        # 使用国际化模板
+        prompt_template = get_prompt_template("regeneration_from_content", lang)
+        regeneration_prompt = prompt_template.format(content=content)
         
         # 处理思考模式
         if not self.enable_thinking:

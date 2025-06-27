@@ -14,6 +14,7 @@ from ..models import ApiResponse, FeedbackRequest
 from ..services import agent_service, session_service
 from ..sse import SSEMessage, sse_manager
 from ..config import logger
+from ..i18n import get_message, get_error_message, get_success_message
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -43,16 +44,16 @@ async def handle_feedback(request: FeedbackRequest):
             if original_req:
                 result = agent.regenerate_with_improvements(original_req, request.content)
             else:
-                result = agent.regenerate_from_content(request.content)
-            action = "重新生成"
+                result = agent.regenerate_from_content(request.content, request.language)
+            action = get_message("regeneration", request.language)
         elif request.feedback in ["需要优化", "满意"]:
             result = agent.optimize_content(request.content)
-            action = "智能优化"
+            action = get_message("intelligent_optimization", request.language)
         else:
             return ApiResponse(
                 success=True,
-                message="反馈处理完成",
-                data={"action": "完成", "content": request.content}
+                message=get_success_message("feedback_processing_complete", request.language),
+                data={"action": get_message("completion", request.language), "content": request.content}
             )
         
         if result["success"]:
@@ -62,7 +63,7 @@ async def handle_feedback(request: FeedbackRequest):
             
             return ApiResponse(
                 success=True,
-                message=f"{action}成功",
+                message=get_success_message("feedback_processing_complete", request.language),
                 data={
                     "content": result["content"],
                     "action": action,
@@ -71,7 +72,7 @@ async def handle_feedback(request: FeedbackRequest):
                 }
             )
         else:
-            raise HTTPException(status_code=500, detail=result.get("error", f"{action}失败"))
+            raise HTTPException(status_code=500, detail=result.get("error", get_error_message("feedback_processing_failed", request.language)))
             
     except Exception as e:
         logger.error(f"反馈处理失败: {e}")
@@ -108,21 +109,21 @@ async def handle_feedback_stream(request: FeedbackRequest):
                 
                 # 处理反馈
                 if request.feedback == "不满意":
-                    action = "重新生成"
-                    yield SSEMessage.status("processing", f"根据反馈{action}中...")
+                    action = get_message("regeneration", request.language)
+                    yield SSEMessage.status(get_message("processing", request.language), f"{get_message('feedback_regenerating', request.language)}...")
                     if original_req:
                         stream_generator = agent.regenerate_with_improvements_stream(original_req, request.content)
                     else:
-                        stream_generator = agent.regenerate_from_content_stream(request.content)
+                        stream_generator = agent.regenerate_from_content_stream(request.content, request.language)
                 elif request.feedback in ["需要优化", "满意"]:
-                    action = "智能优化"
-                    yield SSEMessage.status("processing", f"根据反馈{action}中...")
+                    action = get_message("intelligent_optimization", request.language)
+                    yield SSEMessage.status(get_message("processing", request.language), f"{get_message('feedback_optimizing', request.language)}...")
                     stream_generator = agent.optimize_content_stream(request.content)
                 else:
                     yield SSEMessage.complete({
-                        "action": "完成",
+                        "action": get_message("completion", request.language),
                         "content": request.content,
-                        "message": "处理完成"
+                        "message": get_message("feedback_processing_complete", request.language)
                     })
                     return
                 

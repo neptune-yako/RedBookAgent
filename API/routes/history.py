@@ -2,24 +2,25 @@
 历史记录相关路由
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from ..models import ApiResponse, VersionRestoreRequest
 from ..services import session_service
 from ..config import logger
+from ..i18n import Language, get_message, get_error_message, get_success_message
 
 router = APIRouter(prefix="/history", tags=["history"])
 
 
 @router.get("/{user_id}", response_model=ApiResponse)
-async def get_version_history(user_id: str):
+async def get_version_history(user_id: str, language: Language = Query(default=Language.ZH_CN, description="接口语言")):
     """获取版本历史"""
     try:
         session = session_service.get_user_session(user_id)
         
         return ApiResponse(
             success=True,
-            message="获取版本历史成功",
+            message=get_success_message("version_history_retrieved", language),
             data={
                 "content_history": session["content_history"],
                 "current_version_index": session["current_version_index"],
@@ -45,7 +46,7 @@ async def restore_version(request: VersionRestoreRequest):
             
             return ApiResponse(
                 success=True,
-                message="版本恢复成功",
+                message=get_success_message("version_restore_success", request.language),
                 data={
                     "content": restored_content,
                     "version": request.version_index + 1,
@@ -53,7 +54,7 @@ async def restore_version(request: VersionRestoreRequest):
                 }
             )
         else:
-            raise HTTPException(status_code=400, detail="无效的版本索引")
+            raise HTTPException(status_code=400, detail=get_error_message("invalid_version_index", request.language))
             
     except Exception as e:
         logger.error(f"版本恢复失败: {e}")
@@ -61,14 +62,14 @@ async def restore_version(request: VersionRestoreRequest):
 
 
 @router.delete("/{user_id}", response_model=ApiResponse)
-async def clear_history(user_id: str):
+async def clear_history(user_id: str, language: Language = Query(default=Language.ZH_CN, description="接口语言")):
     """清空用户历史"""
     try:
         session_service.clear_user_session(user_id)
         
         return ApiResponse(
             success=True,
-            message="历史记录已清空",
+            message=get_success_message("history_cleared", language),
             data={"user_id": user_id}
         )
         
