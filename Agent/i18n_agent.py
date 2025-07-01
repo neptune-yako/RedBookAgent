@@ -536,11 +536,118 @@ def format_special_requirements_section(special_requirements: str, language: Lan
     return f"{label}{special_requirements}"
 
 
+# 分类多语言映射
+CATEGORY_TRANSLATIONS = {
+    "美妆护肤": {
+        Language.ZH_CN: "美妆护肤",
+        Language.EN_US: "Beauty & Skincare",
+        Language.ZH_TW: "美妝護膚",
+        Language.JA_JP: "美容・スキンケア"
+    },
+    "时尚穿搭": {
+        Language.ZH_CN: "时尚穿搭",
+        Language.EN_US: "Fashion & Style",
+        Language.ZH_TW: "時尚穿搭",
+        Language.JA_JP: "ファッション・コーディネート"
+    },
+    "美食探店": {
+        Language.ZH_CN: "美食探店",
+        Language.EN_US: "Food & Dining",
+        Language.ZH_TW: "美食探店",
+        Language.JA_JP: "グルメ・レストラン"
+    },
+    "旅行攻略": {
+        Language.ZH_CN: "旅行攻略",
+        Language.EN_US: "Travel Guide",
+        Language.ZH_TW: "旅行攻略",
+        Language.JA_JP: "旅行ガイド"
+    },
+    "生活方式": {
+        Language.ZH_CN: "生活方式",
+        Language.EN_US: "Lifestyle",
+        Language.ZH_TW: "生活方式",
+        Language.JA_JP: "ライフスタイル"
+    },
+    "健身运动": {
+        Language.ZH_CN: "健身运动",
+        Language.EN_US: "Fitness & Sports",
+        Language.ZH_TW: "健身運動",
+        Language.JA_JP: "フィットネス・スポーツ"
+    },
+    "家居装饰": {
+        Language.ZH_CN: "家居装饰",
+        Language.EN_US: "Home Decor",
+        Language.ZH_TW: "家居裝飾",
+        Language.JA_JP: "ホームデコレーション"
+    },
+    "学习分享": {
+        Language.ZH_CN: "学习分享",
+        Language.EN_US: "Learning & Study",
+        Language.ZH_TW: "學習分享",
+        Language.JA_JP: "学習・勉強"
+    },
+    "职场干货": {
+        Language.ZH_CN: "职场干货",
+        Language.EN_US: "Career Tips",
+        Language.ZH_TW: "職場乾貨",
+        Language.JA_JP: "キャリア・仕事術"
+    },
+    "好物推荐": {
+        Language.ZH_CN: "好物推荐",
+        Language.EN_US: "Product Recommendation",
+        Language.ZH_TW: "好物推薦",
+        Language.JA_JP: "おすすめ商品"
+    },
+    "科技数码": {
+        Language.ZH_CN: "科技数码",
+        Language.EN_US: "Technology & Digital",
+        Language.ZH_TW: "科技數碼",
+        Language.JA_JP: "テクノロジー・デジタル"
+    },
+    "情感生活": {
+        Language.ZH_CN: "情感生活",
+        Language.EN_US: "Relationships & Life",
+        Language.ZH_TW: "情感生活",
+        Language.JA_JP: "恋愛・人間関係"
+    },
+    "职场发展": {
+        Language.ZH_CN: "职场发展",
+        Language.EN_US: "Career Development",
+        Language.ZH_TW: "職場發展",
+        Language.JA_JP: "キャリア開発"
+    },
+    "教育学习": {
+        Language.ZH_CN: "教育学习",
+        Language.EN_US: "Education & Learning",
+        Language.ZH_TW: "教育學習",
+        Language.JA_JP: "教育・学習"
+    }
+}
+
+
+def translate_category(category_value: str, target_language: Language = Language.ZH_CN) -> str:
+    """
+    翻译分类到目标语言
+    
+    Args:
+        category_value: 分类值（中文）
+        target_language: 目标语言
+    
+    Returns:
+        翻译后的分类名称
+    """
+    translation_dict = CATEGORY_TRANSLATIONS.get(category_value)
+    if translation_dict:
+        return translation_dict.get(target_language, category_value)
+    return category_value
+
+
 # 导出主要功能
 __all__ = [
     "Language",
     "PROMPT_TEMPLATES", 
     "get_prompt_template",
     "format_keywords_section",
-    "format_special_requirements_section"
+    "format_special_requirements_section",
+    "translate_category"
 ] 

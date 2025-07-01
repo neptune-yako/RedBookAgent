@@ -3,6 +3,8 @@ import json
 import sys
 from typing import Optional, Dict, Any, Generator
 
+ollama_url1 = "http://localhost:11434"
+ollama_url2 = "http://1677347956223778.cn-hangzhou.pai-eas.aliyuncs.com/api/predict/qwen3_8b_redbook1"
 
 class OllamaClient:
     def __init__(self, base_url: str = "http://localhost:11434"):

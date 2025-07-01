@@ -18,7 +18,8 @@ from .i18n_agent import (
     Language, 
     get_prompt_template, 
     format_keywords_section, 
-    format_special_requirements_section
+    format_special_requirements_section,
+    translate_category
 )
 
 from langchain.agents import initialize_agent, AgentType
@@ -28,6 +29,23 @@ from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from pydantic import Field, ConfigDict
+
+
+def get_language_instruction(language: Language) -> str:
+    """根据语言类型生成对应的语言指令"""
+    language_instructions = {
+        Language.ZH_CN: "请用简体中文回答",
+        Language.EN_US: "Please respond in English",
+        Language.ZH_TW: "請用繁體中文回答", 
+        Language.JA_JP: "日本語で回答してください"
+    }
+    return language_instructions.get(language, language_instructions[Language.ZH_CN])
+
+
+def add_language_instruction_to_prompt(prompt: str, language: Language) -> str:
+    """为prompt添加语言指令"""
+    language_instruction = get_language_instruction(language)
+    return f"{language_instruction}。\n\n{prompt}"
 
 
 class ContentCategory(Enum):
@@ -42,6 +60,10 @@ class ContentCategory(Enum):
     STUDY = "学习分享"
     WORK = "职场干货"
     SHOPPING = "好物推荐"
+    TECH = "科技数码"
+    EMOTION = "情感生活"
+    CAREER = "职场发展"
+    EDUCATION = "教育学习"
 
 
 @dataclass
@@ -129,19 +151,33 @@ class XiaohongshuAgent:
         def generate_title_tool(query: str) -> str:
             """生成小红书标题的工具"""
             # 从查询中提取语言信息，如果没有则使用默认语言
-            language = Language.ZH_CN
+            language = Language.ZH_CN  # 默认语言
             if "|language:" in query:
                 query_parts = query.split("|language:")
                 if len(query_parts) > 1:
-                    lang_code = query_parts[1].strip()
+                    # 处理语言代码，可能包含其他内容
+                    lang_part = query_parts[1]
+                    # 提取语言代码（取第一个|之前的部分）
+                    if "|" in lang_part:
+                        lang_code = lang_part.split("|")[0].strip()
+                    else:
+                        lang_code = lang_part.strip()
                     try:
                         language = Language(lang_code)
+                        # 重新构建查询，去掉语言标记
                         query = query_parts[0].strip()
+                        if len(query_parts) > 1 and "|" in query_parts[1]:
+                            remaining_parts = "|".join(query_parts[1].split("|")[1:])
+                            if remaining_parts.strip():
+                                query += "|" + remaining_parts
                     except ValueError:
-                        pass
+                        language = Language.ZH_CN  # 解析失败时使用默认语言
             
             prompt_template = get_prompt_template("title_generation", language)
             prompt = prompt_template.format(query=query)
+            
+            # 添加语言指令
+            prompt = add_language_instruction_to_prompt(prompt, language)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -152,19 +188,33 @@ class XiaohongshuAgent:
         def generate_content_tool(query: str) -> str:
             """生成小红书正文内容的工具"""
             # 从查询中提取语言信息
-            language = Language.ZH_CN
+            language = Language.ZH_CN  # 默认语言
             if "|language:" in query:
                 query_parts = query.split("|language:")
                 if len(query_parts) > 1:
-                    lang_code = query_parts[1].strip()
+                    # 处理语言代码，可能包含其他内容
+                    lang_part = query_parts[1]
+                    # 提取语言代码（取第一个|之前的部分）
+                    if "|" in lang_part:
+                        lang_code = lang_part.split("|")[0].strip()
+                    else:
+                        lang_code = lang_part.strip()
                     try:
                         language = Language(lang_code)
+                        # 重新构建查询，去掉语言标记
                         query = query_parts[0].strip()
+                        if len(query_parts) > 1 and "|" in query_parts[1]:
+                            remaining_parts = "|".join(query_parts[1].split("|")[1:])
+                            if remaining_parts.strip():
+                                query += "|" + remaining_parts
                     except ValueError:
-                        pass
+                        language = Language.ZH_CN  # 解析失败时使用默认语言
             
             prompt_template = get_prompt_template("content_writing", language)
             prompt = prompt_template.format(query=query)
+            
+            # 添加语言指令
+            prompt = add_language_instruction_to_prompt(prompt, language)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -175,19 +225,33 @@ class XiaohongshuAgent:
         def generate_hashtags_tool(query: str) -> str:
             """生成小红书话题标签的工具"""
             # 从查询中提取语言信息
-            language = Language.ZH_CN
+            language = Language.ZH_CN  # 默认语言
             if "|language:" in query:
                 query_parts = query.split("|language:")
                 if len(query_parts) > 1:
-                    lang_code = query_parts[1].strip()
+                    # 处理语言代码，可能包含其他内容
+                    lang_part = query_parts[1]
+                    # 提取语言代码（取第一个|之前的部分）
+                    if "|" in lang_part:
+                        lang_code = lang_part.split("|")[0].strip()
+                    else:
+                        lang_code = lang_part.strip()
                     try:
                         language = Language(lang_code)
+                        # 重新构建查询，去掉语言标记
                         query = query_parts[0].strip()
+                        if len(query_parts) > 1 and "|" in query_parts[1]:
+                            remaining_parts = "|".join(query_parts[1].split("|")[1:])
+                            if remaining_parts.strip():
+                                query += "|" + remaining_parts
                     except ValueError:
-                        pass
+                        language = Language.ZH_CN  # 解析失败时使用默认语言
             
             prompt_template = get_prompt_template("hashtag_generation", language)
             prompt = prompt_template.format(query=query)
+            
+            # 添加语言指令
+            prompt = add_language_instruction_to_prompt(prompt, language)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -198,19 +262,33 @@ class XiaohongshuAgent:
         def content_optimization_tool(query: str) -> str:
             """内容优化建议工具"""
             # 从查询中提取语言信息
-            language = Language.ZH_CN
+            language = Language.ZH_CN  # 默认语言
             if "|language:" in query:
                 query_parts = query.split("|language:")
                 if len(query_parts) > 1:
-                    lang_code = query_parts[1].strip()
+                    # 处理语言代码，可能包含其他内容
+                    lang_part = query_parts[1]
+                    # 提取语言代码（取第一个|之前的部分）
+                    if "|" in lang_part:
+                        lang_code = lang_part.split("|")[0].strip()
+                    else:
+                        lang_code = lang_part.strip()
                     try:
                         language = Language(lang_code)
+                        # 重新构建查询，去掉语言标记
                         query = query_parts[0].strip()
+                        if len(query_parts) > 1 and "|" in query_parts[1]:
+                            remaining_parts = "|".join(query_parts[1].split("|")[1:])
+                            if remaining_parts.strip():
+                                query += "|" + remaining_parts
                     except ValueError:
-                        pass
+                        language = Language.ZH_CN  # 解析失败时使用默认语言
             
             prompt_template = get_prompt_template("content_optimization", language)
             prompt = prompt_template.format(content=query)
+            
+            # 添加语言指令
+            prompt = add_language_instruction_to_prompt(prompt, language)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -277,8 +355,11 @@ class XiaohongshuAgent:
         keywords_section = format_keywords_section(request.keywords, language)
         special_requirements_section = format_special_requirements_section(request.special_requirements, language)
         
+        # 翻译分类到目标语言
+        translated_category = translate_category(request.category.value, language)
+        
         requirement = prompt_template.format(
-            category=request.category.value,
+            category=translated_category,
             topic=request.topic,
             tone=request.tone,
             length=request.length,
@@ -287,9 +368,17 @@ class XiaohongshuAgent:
             special_requirements_section=special_requirements_section
         )
         
+        # 添加语言指令和语言标记
+        requirement = add_language_instruction_to_prompt(requirement, language)
+        requirement = f"|language:{request.language}|{requirement}"
+        
         try:
-            # 使用智能体生成内容
-            result = self.agent.run(requirement)
+            # 处理思考模式
+            if not self.enable_thinking:
+                requirement += "/no_think"
+            
+            # 直接使用 Ollama 客户端生成内容，避免 LangChain Agent 的中文干扰
+            result = self.ollama_client.generate(requirement, stream=self.enable_stream)
             
             return {
                 "success": True,
@@ -316,7 +405,15 @@ class XiaohongshuAgent:
             prompt_template = get_prompt_template("content_optimization", lang)
             optimization_query = prompt_template.format(content=content)
             
-            result = self.agent.run(optimization_query)
+            # 添加语言指令
+            optimization_query = add_language_instruction_to_prompt(optimization_query, lang)
+            
+            # 处理思考模式
+            if not self.enable_thinking:
+                optimization_query += "/no_think"
+            
+            # 直接使用 Ollama 客户端，避免 LangChain Agent 的中文干扰
+            result = self.ollama_client.generate(optimization_query, stream=self.enable_stream)
             
             return {
                 "success": True,
@@ -339,15 +436,9 @@ class XiaohongshuAgent:
             except ValueError:
                 lang = Language.ZH_CN
             
-            # 根据语言添加对话上下文
-            if lang == Language.EN_US:
-                contextualized_message = f"Please respond in English. User message: {message}"
-            elif lang == Language.ZH_TW:
-                contextualized_message = f"請用繁體中文回答。用戶訊息：{message}"
-            elif lang == Language.JA_JP:
-                contextualized_message = f"日本語で回答してください。ユーザーメッセージ：{message}"
-            else:
-                contextualized_message = f"请用简体中文回答。用户消息：{message}"
+            # 使用标准化的语言指令，并将语言信息附加到消息中
+            language_instruction = get_language_instruction(lang)
+            contextualized_message = f"{language_instruction}。|language:{language}|用户消息：{message}"
             
             response = self.agent.run(contextualized_message)
             return response
@@ -391,8 +482,11 @@ class XiaohongshuAgent:
         keywords_section = format_keywords_section(request.keywords, language)
         special_requirements_section = format_special_requirements_section(request.special_requirements, language)
         
+        # 翻译分类到目标语言
+        translated_category = translate_category(request.category.value, language)
+        
         requirement = prompt_template.format(
-            category=request.category.value,
+            category=translated_category,
             topic=request.topic,
             tone=request.tone,
             length=request.length,
@@ -400,6 +494,9 @@ class XiaohongshuAgent:
             keywords_section=keywords_section,
             special_requirements_section=special_requirements_section
         )
+        
+        # 添加语言指令
+        requirement = add_language_instruction_to_prompt(requirement, language)
         
         # 处理思考模式 - 优先使用参数，否则使用实例设置
         thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
@@ -418,15 +515,9 @@ class XiaohongshuAgent:
             except ValueError:
                 lang = Language.ZH_CN
             
-            # 根据语言添加对话上下文
-            if lang == Language.EN_US:
-                contextualized_message = f"Please respond in English. User message: {message}"
-            elif lang == Language.ZH_TW:
-                contextualized_message = f"請用繁體中文回答。用戶訊息：{message}"
-            elif lang == Language.JA_JP:
-                contextualized_message = f"日本語で回答してください。ユーザーメッセージ：{message}"
-            else:
-                contextualized_message = f"请用简体中文回答。用户消息：{message}"
+            # 使用标准化的语言指令，并将语言信息附加到消息中
+            language_instruction = get_language_instruction(lang)
+            contextualized_message = f"{language_instruction}。|language:{language}|用户消息：{message}"
             
             # 处理思考模式 - 优先使用参数，否则使用实例设置
             thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
@@ -477,6 +568,9 @@ class XiaohongshuAgent:
         prompt_template = get_prompt_template("content_optimization", lang)
         optimization_query = prompt_template.format(content=content)
         
+        # 添加语言指令
+        optimization_query = add_language_instruction_to_prompt(optimization_query, lang)
+        
         # 处理思考模式 - 优先使用参数，否则使用实例设置
         thinking_enabled = enable_thinking if enable_thinking is not None else self.enable_thinking
         if not thinking_enabled:
@@ -485,17 +579,56 @@ class XiaohongshuAgent:
         # 使用流式生成器
         return self.ollama_client.generate_stream(optimization_query)
 
-    def intelligent_loop(self, content: str, user_feedback: str, content_request: ContentRequest = None):
+    def intelligent_loop(self, content: str, user_feedback: str, content_request: ContentRequest = None, language: str = "zh-CN"):
         """智能体回环处理
         
         Args:
             content: 当前生成的内容
             user_feedback: 用户反馈 ("不满意", "满意", "需要优化", "重新生成")
             content_request: 原始内容请求，用于重新生成
+            language: 回复语言，默认简体中文
             
         Returns:
             Dict: 处理结果
         """
+        # 获取语言参数
+        try:
+            lang = Language(language)
+        except ValueError:
+            lang = Language.ZH_CN
+        
+        # 定义多语言消息
+        messages = {
+            Language.ZH_CN: {
+                "satisfied_ask": "很高兴您满意这个文案！是否需要我进一步优化内容？",
+                "completed": "创作完成！如需要新的文案，请开始新的创作流程。",
+                "unknown_feedback": "请选择：不满意、满意、需要优化 或 不需要优化，已完成",
+                "error_occurred": "处理过程中出现错误，请重试",
+                "options": ["需要优化", "不需要优化，已完成"]
+            },
+            Language.EN_US: {
+                "satisfied_ask": "Glad you're satisfied with this content! Would you like me to further optimize it?",
+                "completed": "Creation completed! Start a new creation process if you need new content.",
+                "unknown_feedback": "Please choose: Not satisfied, Satisfied, Need optimization, or No optimization needed, completed",
+                "error_occurred": "An error occurred during processing, please try again",
+                "options": ["Need optimization", "No optimization needed, completed"]
+            },
+            Language.ZH_TW: {
+                "satisfied_ask": "很高興您滿意這個文案！是否需要我進一步優化內容？",
+                "completed": "創作完成！如需要新的文案，請開始新的創作流程。",
+                "unknown_feedback": "請選擇：不滿意、滿意、需要優化 或 不需要優化，已完成",
+                "error_occurred": "處理過程中出現錯誤，請重試",
+                "options": ["需要優化", "不需要優化，已完成"]
+            },
+            Language.JA_JP: {
+                "satisfied_ask": "このコンテンツに満足していただけて嬉しいです！さらに最適化しますか？",
+                "completed": "作成完了！新しいコンテンツが必要な場合は、新しい作成プロセスを開始してください。",
+                "unknown_feedback": "選択してください：不満、満足、最適化が必要、または最適化不要、完了",
+                "error_occurred": "処理中にエラーが発生しました。もう一度お試しください",
+                "options": ["最適化が必要", "最適化不要、完了"]
+            }
+        }
+        
         try:
             if user_feedback == "不满意" or user_feedback == "重新生成":
                 # 用户不满意，重新生成内容
@@ -503,27 +636,27 @@ class XiaohongshuAgent:
                     return self.regenerate_with_improvements(content_request, content)
                 else:
                     # 如果没有原始请求，尝试从内容中推断并重新生成
-                    return self.regenerate_from_content(content)
+                    return self.regenerate_from_content(content, language)
                     
             elif user_feedback == "满意":
                 # 用户满意，询问是否需要优化
                 return {
                     "success": True,
                     "action": "ask_optimization",
-                    "message": "很高兴您满意这个文案！是否需要我进一步优化内容？",
-                    "options": ["需要优化", "不需要优化，已完成"]
+                    "message": messages[lang]["satisfied_ask"],
+                    "options": messages[lang]["options"]
                 }
                 
             elif user_feedback == "需要优化":
                 # 用户需要优化，执行智能优化
-                return self.optimize_content(content)
+                return self.optimize_content(content, language)
                 
             elif user_feedback == "不需要优化，已完成":
                 # 用户完全满意，结束流程
                 return {
                     "success": True,
                     "action": "completed",
-                    "message": "创作完成！如需要新的文案，请开始新的创作流程。",
+                    "message": messages[lang]["completed"],
                     "final_content": content
                 }
                 
@@ -532,14 +665,14 @@ class XiaohongshuAgent:
                 return {
                     "success": False,
                     "error": "未识别的反馈类型",
-                    "message": "请选择：不满意、满意、需要优化 或 不需要优化，已完成"
+                    "message": messages[lang]["unknown_feedback"]
                 }
                 
         except Exception as e:
             return {
                 "success": False,
                 "error": str(e),
-                "message": "处理过程中出现错误，请重试"
+                "message": messages[lang]["error_occurred"]
             }
     
     def regenerate_with_improvements(self, request: ContentRequest, previous_content: str):
@@ -551,6 +684,14 @@ class XiaohongshuAgent:
             except ValueError:
                 language = Language.ZH_CN
             
+            # 定义多语言消息
+            messages = {
+                Language.ZH_CN: "已重新生成改进版本，请查看是否满意",
+                Language.EN_US: "Regenerated improved version, please check if you're satisfied",
+                Language.ZH_TW: "已重新生成改進版本，請查看是否滿意",
+                Language.JA_JP: "改良版を再生成しました。満足いただけるかご確認ください"
+            }
+            
             # 使用国际化模板
             prompt_template = get_prompt_template("regeneration_with_improvements", language)
             
@@ -558,8 +699,11 @@ class XiaohongshuAgent:
             keywords_section = format_keywords_section(request.keywords, language)
             special_requirements_section = format_special_requirements_section(request.special_requirements, language)
             
+            # 翻译分类到目标语言
+            translated_category = translate_category(request.category.value, language)
+            
             improvement_prompt = prompt_template.format(
-                category=request.category.value,
+                category=translated_category,
                 topic=request.topic,
                 tone=request.tone,
                 length=request.length,
@@ -568,6 +712,9 @@ class XiaohongshuAgent:
                 special_requirements_section=special_requirements_section,
                 previous_content=previous_content
             )
+            
+            # 添加语言指令
+            improvement_prompt = add_language_instruction_to_prompt(improvement_prompt, language)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -579,7 +726,7 @@ class XiaohongshuAgent:
                 "success": True,
                 "action": "regenerated",
                 "content": result,
-                "message": "已重新生成改进版本，请查看是否满意"
+                "message": messages[language]
             }
             
         except Exception as e:
@@ -598,9 +745,20 @@ class XiaohongshuAgent:
             except ValueError:
                 lang = Language.ZH_CN
             
+            # 定义多语言消息
+            messages = {
+                Language.ZH_CN: "已基于原内容重新生成改进版本",
+                Language.EN_US: "Regenerated improved version based on original content",
+                Language.ZH_TW: "已基於原內容重新生成改進版本",
+                Language.JA_JP: "元のコンテンツに基づいて改良版を再生成しました"
+            }
+            
             # 使用国际化模板
             prompt_template = get_prompt_template("regeneration_from_content", lang)
             regeneration_prompt = prompt_template.format(content=content)
+            
+            # 添加语言指令
+            regeneration_prompt = add_language_instruction_to_prompt(regeneration_prompt, lang)
             
             # 处理思考模式
             if not self.enable_thinking:
@@ -612,7 +770,7 @@ class XiaohongshuAgent:
                 "success": True,
                 "action": "regenerated", 
                 "content": result,
-                "message": "已基于原内容重新生成改进版本"
+                "message": messages[lang]
             }
             
         except Exception as e:
@@ -622,35 +780,69 @@ class XiaohongshuAgent:
                 "action": "error"
             }
     
-    def intelligent_loop_stream(self, content: str, user_feedback: str, content_request: ContentRequest = None):
+    def intelligent_loop_stream(self, content: str, user_feedback: str, content_request: ContentRequest = None, language: str = "zh-CN"):
         """流式智能体回环处理"""
+        # 获取语言参数
+        try:
+            lang = Language(language)
+        except ValueError:
+            lang = Language.ZH_CN
+        
+        # 定义多语言消息
+        messages = {
+            Language.ZH_CN: {
+                "satisfied": "很高兴您满意这个文案！是否需要我进一步优化内容？",
+                "completed": "创作完成！如需要新的文案，请开始新的创作流程。",
+                "unknown": "请选择：不满意、满意、需要优化 或 不需要优化，已完成",
+                "error": "处理过程中出现错误："
+            },
+            Language.EN_US: {
+                "satisfied": "Glad you're satisfied with this content! Would you like me to further optimize it?",
+                "completed": "Creation completed! Start a new creation process if you need new content.",
+                "unknown": "Please choose: Not satisfied, Satisfied, Need optimization, or No optimization needed, completed",
+                "error": "An error occurred during processing: "
+            },
+            Language.ZH_TW: {
+                "satisfied": "很高興您滿意這個文案！是否需要我進一步優化內容？",
+                "completed": "創作完成！如需要新的文案，請開始新的創作流程。",
+                "unknown": "請選擇：不滿意、滿意、需要優化 或 不需要優化，已完成",
+                "error": "處理過程中出現錯誤："
+            },
+            Language.JA_JP: {
+                "satisfied": "このコンテンツに満足していただけて嬉しいです！さらに最適化しますか？",
+                "completed": "作成完了！新しいコンテンツが必要な場合は、新しい作成プロセスを開始してください。",
+                "unknown": "選択してください：不満、満足、最適化が必要、または最適化不要、完了",
+                "error": "処理中にエラーが発生しました："
+            }
+        }
+        
         try:
             if user_feedback == "不满意" or user_feedback == "重新生成":
                 # 重新生成流式版本
                 if content_request:
                     return self.regenerate_with_improvements_stream(content_request, content)
                 else:
-                    return self.regenerate_from_content_stream(content)
+                    return self.regenerate_from_content_stream(content, language)
                     
             elif user_feedback == "需要优化":
                 # 流式优化
-                return self.optimize_content_stream(content)
+                return self.optimize_content_stream(content, language)
                 
             else:
                 # 对于其他情况，返回简单的生成器
                 def simple_response():
                     if user_feedback == "满意":
-                        yield "很高兴您满意这个文案！是否需要我进一步优化内容？"
+                        yield messages[lang]["satisfied"]
                     elif user_feedback == "不需要优化，已完成":
-                        yield "创作完成！如需要新的文案，请开始新的创作流程。"
+                        yield messages[lang]["completed"]
                     else:
-                        yield "请选择：不满意、满意、需要优化 或 不需要优化，已完成"
+                        yield messages[lang]["unknown"]
                 
                 return simple_response()
                 
         except Exception as e:
             def error_response():
-                yield f"处理过程中出现错误：{str(e)}"
+                yield f"{messages[lang]['error']}{str(e)}"
             return error_response()
     
     def regenerate_with_improvements_stream(self, request: ContentRequest, previous_content: str):
@@ -668,8 +860,11 @@ class XiaohongshuAgent:
         keywords_section = format_keywords_section(request.keywords, language)
         special_requirements_section = format_special_requirements_section(request.special_requirements, language)
         
+        # 翻译分类到目标语言
+        translated_category = translate_category(request.category.value, language)
+        
         improvement_prompt = prompt_template.format(
-            category=request.category.value,
+            category=translated_category,
             topic=request.topic,
             tone=request.tone,
             length=request.length,
@@ -678,6 +873,9 @@ class XiaohongshuAgent:
             special_requirements_section=special_requirements_section,
             previous_content=previous_content
         )
+        
+        # 添加语言指令
+        improvement_prompt = add_language_instruction_to_prompt(improvement_prompt, language)
         
         # 处理思考模式
         if not self.enable_thinking:
@@ -696,6 +894,9 @@ class XiaohongshuAgent:
         # 使用国际化模板
         prompt_template = get_prompt_template("regeneration_from_content", lang)
         regeneration_prompt = prompt_template.format(content=content)
+        
+        # 添加语言指令
+        regeneration_prompt = add_language_instruction_to_prompt(regeneration_prompt, lang)
         
         # 处理思考模式
         if not self.enable_thinking:

@@ -458,6 +458,16 @@ class AgentService:
             "total_failed_tasks": agent_status["failed_tasks"] + system_status["failed_tasks"]
         }
     
+    def is_agent_pool_idle(self) -> bool:
+        """检查智能体线程池是否空闲（没有运行或等待的任务）"""
+        status = self.agent_thread_pool.get_system_status()
+        return status["running_tasks"] == 0 and status["pending_tasks"] == 0
+    
+    def can_execute_immediately(self) -> bool:
+        """检查是否可以立即执行任务（有空闲线程且无等待队列）"""
+        status = self.agent_thread_pool.get_system_status()
+        return status["running_tasks"] < status["max_workers"] and status["pending_tasks"] == 0
+    
     def cleanup_old_tasks(self, max_age_hours: int = 24):
         """清理所有线程池的旧任务"""
         self.agent_thread_pool.cleanup_old_tasks(max_age_hours)
@@ -537,6 +547,34 @@ class StreamService:
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
     
+    async def generate_with_sse_smart(self, generator_func: Callable, user_id: str, action: str = "生成", *args, **kwargs) -> AsyncGenerator[str, None]:
+        """智能流式生成：如果线程池空闲则直接执行，否则使用线程池"""
+        # 检查是否可以立即执行
+        if agent_service.can_execute_immediately():
+            logger.info(f"线程池空闲，直接执行流式任务 - 用户: {user_id}, 操作: {action}")
+            # 直接执行生成器函数
+            try:
+                generator = generator_func(*args, **kwargs)
+                async for message in self.generate_with_sse(generator, user_id, action):
+                    yield message
+            except Exception as e:
+                logger.error(f"直接执行流式任务失败: {e}")
+                yield SSEMessage.error(f"{action}失败: {str(e)}")
+        else:
+            # 使用线程池处理
+            logger.info(f"线程池忙碌，使用任务队列 - 用户: {user_id}, 操作: {action}")
+            task_id = agent_service.submit_stream_task(
+                task_type="smart_stream",
+                user_id=user_id,
+                generator_func=generator_func,
+                priority=0,  # 最高优先级
+                *args,
+                **kwargs
+            )
+            
+            async for message in self.generate_with_sse_from_task(task_id, user_id, action):
+                yield message
+    
     async def generate_with_sse(self, generator, user_id: str, action: str = "生成") -> AsyncGenerator[str, None]:
         """通用的SSE生成器包装器"""
         connection_id = f"{user_id}_{datetime.now().timestamp()}"
@@ -603,7 +641,7 @@ class StreamService:
     async def generate_with_sse_from_task(self, task_id: str, user_id: str, action: str = "生成") -> AsyncGenerator[str, None]:
         """从线程池任务结果生成SSE流
         
-        这个方法会轮询任务状态，并将完成的结果转换为SSE流式输出
+        这个方法会高频轮询任务状态，并将完成的结果转换为SSE流式输出
         """
         connection_id = f"{user_id}_{datetime.now().timestamp()}"
         
@@ -614,8 +652,13 @@ class StreamService:
             # 发送开始状态
             yield SSEMessage.status("started", f"开始{action}...")
             
-            # 轮询任务状态
+            # 高效轮询任务状态
+            poll_count = 0
+            status_sent = False
+            last_status_time = datetime.now()
+            
             while True:
+                start_poll_time = datetime.now()
                 task_result = agent_service.get_task_status(task_id)
                 
                 if task_result is None:
@@ -623,11 +666,11 @@ class StreamService:
                     return
                 
                 if task_result.status == TaskStatus.COMPLETED:
-                    # 任务完成，获取结果
+                    # 任务完成，立即处理结果
                     result = task_result.result
                     
                     if isinstance(result, dict) and "chunks" in result:
-                        # 流式任务结果，逐块发送
+                        # 流式任务结果，快速发送
                         chunks = result["chunks"]
                         full_content = result.get("full_content", "")
                         
@@ -644,7 +687,7 @@ class StreamService:
                                 )
                                 # 更新心跳
                                 sse_manager.update_heartbeat(connection_id)
-                                await asyncio.sleep(0.05)  # 模拟流式输出
+                                await asyncio.sleep(0.02)  # 更快的模拟流式输出
                         
                         # 保存到历史
                         if full_content:
@@ -704,9 +747,39 @@ class StreamService:
                     return
                 
                 else:
-                    # 任务还在进行中，发送进度状态
-                    yield SSEMessage.status("processing", f"正在{action}中...")
-                    await asyncio.sleep(0.5)  # 等待0.5秒再检查
+                    # 任务还在进行中，智能化状态消息发送
+                    poll_count += 1
+                    current_time = datetime.now()
+                    
+                    # 获取配置
+                    from .config import SSE_CONFIG
+                    status_interval = SSE_CONFIG.get("status_message_interval", 50)
+                    poll_interval = SSE_CONFIG.get("poll_interval", 0.1)
+                    
+                    # 智能发送状态消息：首次 + 每5秒一次
+                    time_since_last_status = (current_time - last_status_time).total_seconds()
+                    should_send_status = (not status_sent or 
+                                        time_since_last_status >= 5.0 or 
+                                        poll_count % status_interval == 0)
+                    
+                    if should_send_status:
+                        elapsed_time = (current_time - start_poll_time).total_seconds()
+                        yield SSEMessage.status("processing", f"正在{action}中... (已等待 {elapsed_time:.1f}s)")
+                        status_sent = True
+                        last_status_time = current_time
+                    
+                    # 更新心跳但不发送消息
+                    sse_manager.update_heartbeat(connection_id)
+                    
+                    # 动态调整轮询间隔：任务运行时间越长，轮询间隔越长
+                    if poll_count < 10:  # 前1秒快速轮询
+                        actual_interval = 0.05
+                    elif poll_count < 50:  # 前5秒中速轮询
+                        actual_interval = poll_interval
+                    else:  # 5秒后慢速轮询
+                        actual_interval = min(poll_interval * 2, 0.3)
+                    
+                    await asyncio.sleep(actual_interval)
                 
         except Exception as e:
             logger.error(f"{action}过程中出错: {e}")

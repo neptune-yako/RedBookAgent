@@ -132,36 +132,40 @@ async def chat_stream(request: ChatRequest):
 
 @router.post("/stream/async")
 async def chat_stream_async(request: ChatRequest):
-    """流式对话聊天（SSE + 线程池）- 在线程池中执行"""
+    """智能流式对话聊天（SSE）- 空闲时直接执行，忙碌时使用线程池"""
     try:
         agent = agent_service.check_ready()
         
+        # 语言判断和验证
+        from ..i18n import Language
+        
+        try:
+            # 验证语言参数是否有效
+            target_language = Language(request.language)
+            logger.info(f"用户 {request.user_id} 聊天请求语言: {target_language.value}")
+        except ValueError:
+            # 如果语言无效，使用默认语言
+            target_language = Language.ZH_CN
+            logger.warning(f"用户 {request.user_id} 使用了无效语言 '{request.language}'，已切换到默认语言: {target_language.value}")
+        
         def stream_chat_func():
-            """在线程池中执行的流式聊天函数"""
-            # 返回流式聊天生成器
-            return agent.chat_stream(request.message, request.language, enable_thinking=request.enable_thinking)
+            """流式聊天函数"""
+            # 返回流式聊天生成器，使用验证后的语言
+            return agent.chat_stream(request.message, target_language.value, enable_thinking=request.enable_thinking)
         
-        # 提交流式任务到智能体线程池
-        task_id = agent_service.submit_stream_task(
-            task_type="chat_stream",
-            user_id=request.user_id,
-            generator_func=stream_chat_func,
-            priority=1  # 聊天流式任务高优先级
-        )
-        
-        # 使用任务结果生成SSE流
-        async def sse_task_stream():
-            async for message in stream_service.generate_with_sse_from_task(
-                task_id, 
-                request.user_id, 
-                get_message("chat", request.language)
+        # 使用智能路由进行流式聊天
+        async def sse_smart_stream():
+            async for message in stream_service.generate_with_sse_smart(
+                generator_func=stream_chat_func,
+                user_id=request.user_id,
+                action=get_message("chat", target_language)  # 使用目标语言获取消息
             ):
                 yield message
         
-        return EventSourceResponse(sse_task_stream())
+        return EventSourceResponse(sse_smart_stream())
         
     except Exception as e:
-        logger.error(f"提交流式聊天任务失败: {e}")
+        logger.error(f"智能流式聊天任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

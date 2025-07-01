@@ -24,6 +24,19 @@ async def handle_feedback(request: FeedbackRequest):
     """智能反馈回环处理"""
     try:
         agent = agent_service.check_ready()
+        
+        # 语言判断和验证
+        from ..i18n import Language
+        
+        try:
+            # 验证语言参数是否有效
+            target_language = Language(request.language)
+            logger.info(f"用户 {request.user_id} 反馈请求语言: {target_language.value}")
+        except ValueError:
+            # 如果语言无效，使用默认语言
+            target_language = Language.ZH_CN
+            logger.warning(f"用户 {request.user_id} 使用了无效语言 '{request.language}'，已切换到默认语言: {target_language.value}")
+        
         session = session_service.get_user_session(request.user_id)
         
         # 构造原始请求
@@ -36,43 +49,48 @@ async def handle_feedback(request: FeedbackRequest):
                 length=request.original_request.length,
                 keywords=request.original_request.keywords or [],
                 target_audience=request.original_request.target_audience,
-                special_requirements=request.original_request.special_requirements
+                special_requirements=request.original_request.special_requirements,
+                language=target_language.value
             )
         
-        # 处理反馈
-        if request.feedback == "不满意":
-            if original_req:
-                result = agent.regenerate_with_improvements(original_req, request.content)
-            else:
-                result = agent.regenerate_from_content(request.content, request.language)
-            action = get_message("regeneration", request.language)
-        elif request.feedback in ["需要优化", "满意"]:
-            result = agent.optimize_content(request.content)
-            action = get_message("intelligent_optimization", request.language)
-        else:
-            return ApiResponse(
-                success=True,
-                message=get_success_message("feedback_processing_complete", request.language),
-                data={"action": get_message("completion", request.language), "content": request.content}
-            )
+        # 使用intelligent_loop方法处理反馈
+        result = agent.intelligent_loop(
+            content=request.content,
+            user_feedback=request.feedback,
+            content_request=original_req,
+            language=target_language.value
+        )
         
         if result["success"]:
-            # 保存到历史
-            session_service.add_content_to_history(request.user_id, result["content"], action)
-            session["feedback_round"] = session.get("feedback_round", 0) + 1
+            action = ""
+            if result.get("action") == "regenerated":
+                action = get_message("regeneration", target_language)
+            elif result.get("action") == "ask_optimization":
+                action = get_message("intelligent_optimization", target_language)
+            elif result.get("action") == "completed":
+                action = get_message("completion", target_language)
+            else:
+                action = get_message("feedback_processing", target_language)
+            
+            # 如果有新生成的内容，保存到历史
+            if result.get("content"):
+                session_service.add_content_to_history(request.user_id, result["content"], action)
+                session["feedback_round"] = session.get("feedback_round", 0) + 1
             
             return ApiResponse(
                 success=True,
-                message=get_success_message("feedback_processing_complete", request.language),
+                message=result.get("message", get_success_message("feedback_processing_complete", target_language)),
                 data={
-                    "content": result["content"],
-                    "action": action,
-                    "version": session["current_version_index"] + 1,
-                    "feedback_round": session["feedback_round"]
+                    "content": result.get("content", request.content),
+                    "action": result.get("action", "processed"),
+                    "message": result.get("message", ""),
+                    "options": result.get("options", []),
+                    "version": session["current_version_index"] + 1 if result.get("content") else session.get("current_version_index", 1),
+                    "feedback_round": session.get("feedback_round", 0)
                 }
             )
         else:
-            raise HTTPException(status_code=500, detail=result.get("error", get_error_message("feedback_processing_failed", request.language)))
+            raise HTTPException(status_code=500, detail=result.get("error", get_error_message("feedback_processing_failed", target_language)))
             
     except Exception as e:
         logger.error(f"反馈处理失败: {e}")
@@ -84,6 +102,19 @@ async def handle_feedback_stream(request: FeedbackRequest):
     """流式智能反馈回环处理（SSE）"""
     try:
         agent = agent_service.check_ready()
+        
+        # 语言判断和验证
+        from ..i18n import Language
+        
+        try:
+            # 验证语言参数是否有效
+            target_language = Language(request.language)
+            logger.info(f"用户 {request.user_id} 反馈请求语言: {target_language.value}")
+        except ValueError:
+            # 如果语言无效，使用默认语言
+            target_language = Language.ZH_CN
+            logger.warning(f"用户 {request.user_id} 使用了无效语言 '{request.language}'，已切换到默认语言: {target_language.value}")
+        
         session = session_service.get_user_session(request.user_id)
         
         async def sse_feedback_stream():
@@ -101,31 +132,34 @@ async def handle_feedback_stream(request: FeedbackRequest):
                         length=request.original_request.length,
                         keywords=request.original_request.keywords or [],
                         target_audience=request.original_request.target_audience,
-                        special_requirements=request.original_request.special_requirements
+                        special_requirements=request.original_request.special_requirements,
+                        language=target_language.value
                     )
                 
                 content = ""
                 action = ""
                 
-                # 处理反馈
-                if request.feedback == "不满意":
-                    action = get_message("regeneration", request.language)
-                    yield SSEMessage.status(get_message("processing", request.language), f"{get_message('feedback_regenerating', request.language)}...")
-                    if original_req:
-                        stream_generator = agent.regenerate_with_improvements_stream(original_req, request.content)
-                    else:
-                        stream_generator = agent.regenerate_from_content_stream(request.content, request.language)
-                elif request.feedback in ["需要优化", "满意"]:
-                    action = get_message("intelligent_optimization", request.language)
-                    yield SSEMessage.status(get_message("processing", request.language), f"{get_message('feedback_optimizing', request.language)}...")
-                    stream_generator = agent.optimize_content_stream(request.content)
+                # 使用intelligent_loop_stream方法处理反馈
+                yield SSEMessage.status(get_message("processing", target_language), f"{get_message('feedback_processing', target_language)}...")
+                
+                stream_generator = agent.intelligent_loop_stream(
+                    content=request.content,
+                    user_feedback=request.feedback,
+                    content_request=original_req,
+                    language=target_language.value
+                )
+                
+                # 确定操作类型
+                if request.feedback == "不满意" or request.feedback == "重新生成":
+                    action = get_message("regeneration", target_language)
+                elif request.feedback == "需要优化":
+                    action = get_message("intelligent_optimization", target_language)
+                elif request.feedback == "满意":
+                    action = get_message("satisfaction_inquiry", target_language)
+                elif request.feedback == "不需要优化，已完成":
+                    action = get_message("completion", target_language)
                 else:
-                    yield SSEMessage.complete({
-                        "action": get_message("completion", request.language),
-                        "content": request.content,
-                        "message": get_message("feedback_processing_complete", request.language)
-                    })
-                    return
+                    action = get_message("feedback_processing", target_language)
                 
                 chunk_count = 0
                 
@@ -152,7 +186,7 @@ async def handle_feedback_stream(request: FeedbackRequest):
                         await asyncio.sleep(0.01)
                 
                 # 保存到历史
-                if content:
+                if content and request.feedback in ["不满意", "重新生成", "需要优化"]:
                     session_service.add_content_to_history(request.user_id, content, action)
                     session["feedback_round"] = session.get("feedback_round", 0) + 1
                     
@@ -166,7 +200,16 @@ async def handle_feedback_stream(request: FeedbackRequest):
                         "total_length": len(content)
                     })
                 else:
-                    yield SSEMessage.error("生成内容为空")
+                    # 对于询问或完成类的反馈，直接返回确认消息
+                    yield SSEMessage.complete({
+                        "action": action,
+                        "content": content or request.content,
+                        "message": content or get_message("feedback_processing_complete", target_language),
+                        "version": session.get('current_version_index', 1),
+                        "feedback_round": session.get('feedback_round', 0),
+                        "total_chunks": chunk_count,
+                        "total_length": len(content) if content else 0
+                    })
                 
             except Exception as e:
                 logger.error(f"反馈处理过程中出错: {e}")
