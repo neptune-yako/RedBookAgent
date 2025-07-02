@@ -63,7 +63,9 @@ MESSAGES: Dict[Language, Dict[str, str]] = {
         "initial_generation": "初始生成",
         "intelligent_optimization": "智能优化",
         "regeneration": "重新生成",
-        "completion": "完成"
+        "completion": "完成",
+        "feedback_processing": "反馈处理",
+        "satisfaction_inquiry": "满意度询问"
     },
     
     Language.EN_US: {
@@ -103,7 +105,9 @@ MESSAGES: Dict[Language, Dict[str, str]] = {
         "initial_generation": "Initial Generation",
         "intelligent_optimization": "Intelligent Optimization", 
         "regeneration": "Regeneration",
-        "completion": "Completion"
+        "completion": "Completion",
+        "feedback_processing": "Feedback Processing",
+        "satisfaction_inquiry": "Satisfaction Inquiry"
     },
     
     Language.ZH_TW: {
@@ -143,7 +147,9 @@ MESSAGES: Dict[Language, Dict[str, str]] = {
         "initial_generation": "初始生成",
         "intelligent_optimization": "智慧優化",
         "regeneration": "重新生成",
-        "completion": "完成"
+        "completion": "完成",
+        "feedback_processing": "反饋處理",
+        "satisfaction_inquiry": "滿意度詢問"
     },
     
     Language.JA_JP: {
@@ -183,7 +189,9 @@ MESSAGES: Dict[Language, Dict[str, str]] = {
         "initial_generation": "初期生成",
         "intelligent_optimization": "インテリジェント最適化",
         "regeneration": "再生成",
-        "completion": "完了"
+        "completion": "完了",
+        "feedback_processing": "フィードバック処理",
+        "satisfaction_inquiry": "満足度確認"
     }
 }
 

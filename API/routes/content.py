@@ -146,7 +146,12 @@ async def generate_content_stream(request: ContentGenerationRequest):
         async def sse_generate_stream():
             # 直接传递enable_thinking参数，不修改全局状态
             generator = agent.generate_complete_post_stream(content_req, enable_thinking=request.enable_thinking)
-            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("initial_generation", request.language)):
+            from ..i18n import Language
+            try:
+                lang = Language(request.language)
+            except ValueError:
+                lang = Language.ZH_CN
+            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("initial_generation", request.language), lang):
                 yield message
         
         return EventSourceResponse(sse_generate_stream())
@@ -200,7 +205,8 @@ async def generate_content_stream_async(request: ContentGenerationRequest):
             async for message in stream_service.generate_with_sse_smart(
                 generator_func=stream_generator_func,
                 user_id=request.user_id,
-                action=get_message("initial_generation", target_language)  # 使用目标语言获取消息
+                action=get_message("initial_generation", target_language),  # 使用目标语言获取消息
+                language=target_language  # 传递语言参数给SSE处理
             ):
                 yield message
         
@@ -302,7 +308,12 @@ async def optimize_content_stream(request: ContentOptimizationRequest):
         async def sse_optimize_stream():
             # 直接传递enable_thinking参数，不修改全局状态
             generator = agent.optimize_content_stream(request.content, request.language, enable_thinking=request.enable_thinking)
-            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("intelligent_optimization", request.language)):
+            from ..i18n import Language
+            try:
+                lang = Language(request.language)
+            except ValueError:
+                lang = Language.ZH_CN
+            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("intelligent_optimization", request.language), lang):
                 yield message
         
         return EventSourceResponse(sse_optimize_stream())
@@ -340,7 +351,8 @@ async def optimize_content_stream_async(request: ContentOptimizationRequest):
             async for message in stream_service.generate_with_sse_smart(
                 generator_func=stream_optimizer_func,
                 user_id=request.user_id,
-                action=get_message("intelligent_optimization", target_language)  # 使用目标语言获取消息
+                action=get_message("intelligent_optimization", target_language),  # 使用目标语言获取消息
+                language=target_language  # 传递语言参数给SSE处理
             ):
                 yield message
         

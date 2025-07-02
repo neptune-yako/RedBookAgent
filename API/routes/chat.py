@@ -83,7 +83,15 @@ async def chat_stream(request: ChatRequest):
                 sse_manager.add_connection(connection_id, request.user_id)
                 
                 # 发送开始状态
-                yield SSEMessage.status("started", get_message("chat_started", request.language))
+                from ..i18n import Language
+                try:
+                    lang = Language(request.language)
+                except ValueError:
+                    lang = Language.ZH_CN
+                
+                start_message = get_message("processing", lang)
+                action_message = get_message("chat", request.language)
+                yield SSEMessage.status("started", f"{start_message} {action_message}...")
                 
                 response_content = ""
                 chunk_count = 0
@@ -158,7 +166,8 @@ async def chat_stream_async(request: ChatRequest):
             async for message in stream_service.generate_with_sse_smart(
                 generator_func=stream_chat_func,
                 user_id=request.user_id,
-                action=get_message("chat", target_language)  # 使用目标语言获取消息
+                action=get_message("chat", target_language),  # 使用目标语言获取消息
+                language=target_language  # 传递语言参数给SSE处理
             ):
                 yield message
         

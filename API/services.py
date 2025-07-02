@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from Agent.xiaohongshu_agent import XiaohongshuAgent, ContentRequest, ContentCategory
 from .sse import SSEMessage, sse_manager
 from .config import logger, THREAD_CONFIG
+from .i18n import Language, get_message
 
 
 @dataclass
@@ -547,7 +548,7 @@ class StreamService:
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
     
-    async def generate_with_sse_smart(self, generator_func: Callable, user_id: str, action: str = "生成", *args, **kwargs) -> AsyncGenerator[str, None]:
+    async def generate_with_sse_smart(self, generator_func: Callable, user_id: str, action: str = "生成", language: Language = Language.ZH_CN, *args, **kwargs) -> AsyncGenerator[str, None]:
         """智能流式生成：如果线程池空闲则直接执行，否则使用线程池"""
         # 检查是否可以立即执行
         if agent_service.can_execute_immediately():
@@ -555,11 +556,12 @@ class StreamService:
             # 直接执行生成器函数
             try:
                 generator = generator_func(*args, **kwargs)
-                async for message in self.generate_with_sse(generator, user_id, action):
+                async for message in self.generate_with_sse(generator, user_id, action, language):
                     yield message
             except Exception as e:
                 logger.error(f"直接执行流式任务失败: {e}")
-                yield SSEMessage.error(f"{action}失败: {str(e)}")
+                error_message = get_message("generation_failed", language) if action == get_message("initial_generation", language) else f"{action}失败"
+                yield SSEMessage.error(f"{error_message}: {str(e)}")
         else:
             # 使用线程池处理
             logger.info(f"线程池忙碌，使用任务队列 - 用户: {user_id}, 操作: {action}")
@@ -572,10 +574,10 @@ class StreamService:
                 **kwargs
             )
             
-            async for message in self.generate_with_sse_from_task(task_id, user_id, action):
+            async for message in self.generate_with_sse_from_task(task_id, user_id, action, language):
                 yield message
     
-    async def generate_with_sse(self, generator, user_id: str, action: str = "生成") -> AsyncGenerator[str, None]:
+    async def generate_with_sse(self, generator, user_id: str, action: str = "生成", language: Language = Language.ZH_CN) -> AsyncGenerator[str, None]:
         """通用的SSE生成器包装器"""
         connection_id = f"{user_id}_{datetime.now().timestamp()}"
         
@@ -583,8 +585,9 @@ class StreamService:
             # 添加连接
             sse_manager.add_connection(connection_id, user_id)
             
-            # 发送开始状态
-            yield SSEMessage.status("started", f"开始{action}...")
+            # 发送开始状态 - 使用国际化消息
+            start_message = get_message("processing", language)
+            yield SSEMessage.status("started", f"{start_message} {action}...")
             
             content = ""
             chunk_count = 0
@@ -628,17 +631,19 @@ class StreamService:
                     "total_length": len(content)
                 })
             else:
-                yield SSEMessage.error("生成内容为空")
+                empty_content_message = get_message("generation_failed", language)
+                yield SSEMessage.error(empty_content_message)
                 
         except Exception as e:
             logger.error(f"{action}过程中出错: {e}")
-            yield SSEMessage.error(f"{action}失败: {str(e)}")
+            error_message = get_message("generation_failed", language)
+            yield SSEMessage.error(f"{error_message}: {str(e)}")
         
         finally:
             # 移除连接
             sse_manager.remove_connection(connection_id)
     
-    async def generate_with_sse_from_task(self, task_id: str, user_id: str, action: str = "生成") -> AsyncGenerator[str, None]:
+    async def generate_with_sse_from_task(self, task_id: str, user_id: str, action: str = "生成", language: Language = Language.ZH_CN) -> AsyncGenerator[str, None]:
         """从线程池任务结果生成SSE流
         
         这个方法会高频轮询任务状态，并将完成的结果转换为SSE流式输出
@@ -649,8 +654,9 @@ class StreamService:
             # 添加连接
             sse_manager.add_connection(connection_id, user_id)
             
-            # 发送开始状态
-            yield SSEMessage.status("started", f"开始{action}...")
+            # 发送开始状态 - 使用国际化消息
+            start_message = get_message("processing", language)
+            yield SSEMessage.status("started", f"{start_message} {action}...")
             
             # 高效轮询任务状态
             poll_count = 0
@@ -662,7 +668,8 @@ class StreamService:
                 task_result = agent_service.get_task_status(task_id)
                 
                 if task_result is None:
-                    yield SSEMessage.error(f"任务 {task_id} 不存在")
+                    error_message = get_message("generation_failed", language)
+                    yield SSEMessage.error(f"{error_message}: 任务 {task_id} 不存在")
                     return
                 
                 if task_result.status == TaskStatus.COMPLETED:
@@ -704,7 +711,8 @@ class StreamService:
                                 "execution_time": task_result.execution_time
                             })
                         else:
-                            yield SSEMessage.error("生成内容为空")
+                            empty_content_message = get_message("generation_failed", language)
+                            yield SSEMessage.error(empty_content_message)
                     else:
                         # 普通任务结果，直接输出
                         content = str(result)
@@ -735,15 +743,18 @@ class StreamService:
                     return
                 
                 elif task_result.status == TaskStatus.FAILED:
-                    yield SSEMessage.error(f"{action}失败: {task_result.error}")
+                    error_message = get_message("generation_failed", language)
+                    yield SSEMessage.error(f"{error_message}: {task_result.error}")
                     return
                 
                 elif task_result.status == TaskStatus.TIMEOUT:
-                    yield SSEMessage.error(f"{action}超时")
+                    timeout_message = "超时" if language == Language.ZH_CN else "Timeout" if language == Language.EN_US else "タイムアウト" if language == Language.JA_JP else "超時"
+                    yield SSEMessage.error(f"{action}{timeout_message}")
                     return
                 
                 elif task_result.status == TaskStatus.CANCELLED:
-                    yield SSEMessage.error(f"{action}已取消")
+                    cancelled_message = "已取消" if language == Language.ZH_CN else "Cancelled" if language == Language.EN_US else "キャンセル済み" if language == Language.JA_JP else "已取消"
+                    yield SSEMessage.error(f"{action}{cancelled_message}")
                     return
                 
                 else:
@@ -764,7 +775,9 @@ class StreamService:
                     
                     if should_send_status:
                         elapsed_time = (current_time - start_poll_time).total_seconds()
-                        yield SSEMessage.status("processing", f"正在{action}中... (已等待 {elapsed_time:.1f}s)")
+                        processing_message = get_message("processing", language)
+                        wait_message = "已等待" if language == Language.ZH_CN else "waiting" if language == Language.EN_US else "待機中" if language == Language.JA_JP else "已等待"
+                        yield SSEMessage.status("processing", f"{processing_message} {action}... ({wait_message} {elapsed_time:.1f}s)")
                         status_sent = True
                         last_status_time = current_time
                     
@@ -782,8 +795,9 @@ class StreamService:
                     await asyncio.sleep(actual_interval)
                 
         except Exception as e:
-            logger.error(f"{action}过程中出错: {e}")
-            yield SSEMessage.error(f"{action}失败: {str(e)}")
+            logger.error(f"SSE任务轮询错误: {e}")
+            error_message = get_message("generation_failed", language)
+            yield SSEMessage.error(f"{error_message}: {str(e)}")
         
         finally:
             # 移除连接

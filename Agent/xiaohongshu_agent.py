@@ -35,9 +35,9 @@ def get_language_instruction(language: Language) -> str:
     """根据语言类型生成对应的语言指令"""
     language_instructions = {
         Language.ZH_CN: "请用简体中文回答",
-        Language.EN_US: "Please respond in English",
-        Language.ZH_TW: "請用繁體中文回答", 
-        Language.JA_JP: "日本語で回答してください"
+        Language.EN_US: "IMPORTANT: You must respond ONLY in English. Do not use any Chinese characters. Write content in English language for English-speaking audience",
+        Language.ZH_TW: "請用繁體中文回答，不要使用簡體字", 
+        Language.JA_JP: "重要：必ず日本語で回答してください。中国語は使用しないでください"
     }
     return language_instructions.get(language, language_instructions[Language.ZH_CN])
 
@@ -45,7 +45,17 @@ def get_language_instruction(language: Language) -> str:
 def add_language_instruction_to_prompt(prompt: str, language: Language) -> str:
     """为prompt添加语言指令"""
     language_instruction = get_language_instruction(language)
-    return f"{language_instruction}。\n\n{prompt}"
+    if language == Language.EN_US:
+        # 对英语添加更强的指令
+        return f"{language_instruction}\n\nIMPORTANT: Your entire response must be in English. This includes the title, content, and hashtags.\n\n{prompt}\n\nRemember: Write EVERYTHING in English language."
+    elif language == Language.JA_JP:
+        # 对日语添加更强的指令
+        return f"{language_instruction}\n\n重要：回答の全てを日本語で書いてください。\n\n{prompt}\n\n注意：タイトル、内容、ハッシュタグすべて日本語で書いてください。"
+    elif language == Language.ZH_TW:
+        # 对繁体中文添加更强的指令
+        return f"{language_instruction}\n\n重要：請使用繁體中文，不要使用簡體字。\n\n{prompt}\n\n記住：標題、內容、標籤都要用繁體中文。"
+    else:
+        return f"{language_instruction}。\n\n{prompt}"
 
 
 class ContentCategory(Enum):
@@ -503,8 +513,17 @@ class XiaohongshuAgent:
         if not thinking_enabled:
             requirement += "/no_think"
         
-        # 使用流式生成器
-        return self.ollama_client.generate_stream(requirement)
+        # 准备系统级语言提示
+        system_prompt = None
+        if language == Language.EN_US:
+            system_prompt = "You are a professional content creator for Xiaohongshu (Little Red Book). You must respond ONLY in English. Never use Chinese characters in your response."
+        elif language == Language.JA_JP:
+            system_prompt = "あなたは小紅書（シャオホンシュー）のプロのコンテンツクリエイターです。必ず日本語のみで回答してください。中国語は決して使用しないでください。"
+        elif language == Language.ZH_TW:
+            system_prompt = "您是小紅書的專業內容創作者。請使用繁體中文回答，不要使用簡體字。"
+        
+        # 使用流式生成器，传递系统提示
+        return self.ollama_client.generate_stream(requirement, system_prompt)
 
     def chat_stream(self, message: str, language: str = "zh-CN", enable_thinking: bool = None):
         """流式对话"""
@@ -576,8 +595,17 @@ class XiaohongshuAgent:
         if not thinking_enabled:
             optimization_query += "/no_think"
         
-        # 使用流式生成器
-        return self.ollama_client.generate_stream(optimization_query)
+        # 准备系统级语言提示
+        system_prompt = None
+        if lang == Language.EN_US:
+            system_prompt = "You are a professional content optimizer for Xiaohongshu (Little Red Book). You must respond ONLY in English. Never use Chinese characters in your response."
+        elif lang == Language.JA_JP:
+            system_prompt = "あなたは小紅書（シャオホンシュー）のプロのコンテンツ最適化専門家です。必ず日本語のみで回答してください。中国語は決して使用しないでください。"
+        elif lang == Language.ZH_TW:
+            system_prompt = "您是小紅書の專業內容優化專家。請使用繁體中文回答，不要使用簡體字。"
+        
+        # 使用流式生成器，传递系统提示
+        return self.ollama_client.generate_stream(optimization_query, system_prompt)
 
     def intelligent_loop(self, content: str, user_feedback: str, content_request: ContentRequest = None, language: str = "zh-CN"):
         """智能体回环处理

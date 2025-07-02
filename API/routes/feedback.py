@@ -140,7 +140,9 @@ async def handle_feedback_stream(request: FeedbackRequest):
                 action = ""
                 
                 # 使用intelligent_loop_stream方法处理反馈
-                yield SSEMessage.status(get_message("processing", target_language), f"{get_message('feedback_processing', target_language)}...")
+                processing_message = get_message("processing", target_language)
+                feedback_message = get_message("feedback_processing", target_language)
+                yield SSEMessage.status("processing", f"{processing_message} {feedback_message}...")
                 
                 stream_generator = agent.intelligent_loop_stream(
                     content=request.content,
