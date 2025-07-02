@@ -29,21 +29,23 @@ CORS_CONFIG = {
 SSE_CONFIG = {
     "heartbeat_interval": 30,  # 心跳间隔（秒）
     "connection_timeout": 60,  # 连接超时（秒）
-    "cleanup_interval": 30     # 清理间隔（秒）
+    "cleanup_interval": 30,    # 清理间隔（秒）
+    "poll_interval": 0.1,      # 任务状态轮询间隔（秒）- 缩短到100ms
+    "status_message_interval": 50  # 状态消息发送间隔（轮询次数，即每50次轮询发送一次状态）
 }
 
 # 多线程配置
 THREAD_CONFIG = {
     # 智能体专用线程池配置
     "agent_pool": {
-        "max_workers": 3,      # 智能体任务最大工作线程数（AI任务需要更多资源）
-        "queue_size": 20,      # 智能体任务队列大小
+        "max_workers": 5,      # 智能体任务最大工作线程数（增加以提高并发）
+        "queue_size": 30,      # 智能体任务队列大小（增加队列容量）
         "task_timeout": 300,   # 任务超时时间（秒）
     },
     # 系统功能专用线程池配置
     "system_pool": {
-        "max_workers": 5,      # 系统任务最大工作线程数
-        "queue_size": 50,      # 系统任务队列大小
+        "max_workers": 8,      # 系统任务最大工作线程数（增加系统任务并发）
+        "queue_size": 100,     # 系统任务队列大小（增加队列容量）
         "task_timeout": 60,    # 系统任务超时时间（秒）
     },
     # 通用配置

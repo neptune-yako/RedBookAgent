@@ -3,9 +3,11 @@ import json
 import sys
 from typing import Optional, Dict, Any, Generator
 
+ollama_url1 = "http://localhost:11434"
+ollama_url2 = "https://d1ia07vhri0c73f8pm5g-11434.agent.damodel.com/"
 
 class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434"):
+    def __init__(self, base_url: str = ollama_url1):
         """
         初始化Ollama客户端
         
@@ -87,12 +89,13 @@ class OllamaClient:
             print(f"拉取模型失败: {e}")
             return False
     
-    def generate_stream(self, prompt: str) -> Generator[str, None, None]:
+    def generate_stream(self, prompt: str, system_prompt: str = None) -> Generator[str, None, None]:
         """
         生成文本回复的流式生成器
         
         Args:
             prompt: 输入提示词
+            system_prompt: 系统提示词（可选）
             
         Yields:
             str: 生成的文本片段
@@ -103,6 +106,14 @@ class OllamaClient:
                 "prompt": prompt,
                 "stream": True
             }
+            
+            # 如果有系统提示词，添加到选项中
+            if system_prompt:
+                payload["options"] = {
+                    "system": system_prompt,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                }
             
             response = requests.post(
                 f"{self.base_url}/api/generate",
@@ -123,13 +134,14 @@ class OllamaClient:
         except requests.exceptions.RequestException as e:
             yield f"生成文本失败: {e}"
     
-    def generate(self, prompt: str, stream: bool = False) -> Optional[str]:
+    def generate(self, prompt: str, stream: bool = False, system_prompt: str = None) -> Optional[str]:
         """
         生成文本回复
         
         Args:
             prompt: 输入提示词
             stream: 是否流式输出
+            system_prompt: 系统提示词（可选）
             
         Returns:
             str: 生成的文本，失败返回None
@@ -140,6 +152,14 @@ class OllamaClient:
                 "prompt": prompt,
                 "stream": stream
             }
+            
+            # 如果有系统提示词，添加到选项中
+            if system_prompt:
+                payload["options"] = {
+                    "system": system_prompt,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                }
             
             response = requests.post(
                 f"{self.base_url}/api/generate",

@@ -29,7 +29,8 @@ async def generate_content(request: ContentGenerationRequest):
             length=request.length,
             keywords=request.keywords or [],
             target_audience=request.target_audience,
-            special_requirements=request.special_requirements
+            special_requirements=request.special_requirements,
+            language=request.language
         )
         
         result = agent.generate_complete_post(content_req)
@@ -72,7 +73,8 @@ async def generate_content_async(request: ContentGenerationRequest):
                 length=request.length,
                 keywords=request.keywords or [],
                 target_audience=request.target_audience,
-                special_requirements=request.special_requirements
+                special_requirements=request.special_requirements,
+                language=request.language
             )
             
             result = agent.generate_complete_post(content_req)
@@ -132,7 +134,8 @@ async def generate_content_stream(request: ContentGenerationRequest):
             length=request.length,
             keywords=request.keywords or [],
             target_audience=request.target_audience,
-            special_requirements=request.special_requirements
+            special_requirements=request.special_requirements,
+            language=request.language
         )
         
         # 保存当前请求到会话
@@ -143,7 +146,12 @@ async def generate_content_stream(request: ContentGenerationRequest):
         async def sse_generate_stream():
             # 直接传递enable_thinking参数，不修改全局状态
             generator = agent.generate_complete_post_stream(content_req, enable_thinking=request.enable_thinking)
-            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("initial_generation", request.language)):
+            from ..i18n import Language
+            try:
+                lang = Language(request.language)
+            except ValueError:
+                lang = Language.ZH_CN
+            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("initial_generation", request.language), lang):
                 yield message
         
         return EventSourceResponse(sse_generate_stream())
@@ -155,16 +163,29 @@ async def generate_content_stream(request: ContentGenerationRequest):
 
 @router.post("/generate/stream/async")
 async def generate_content_stream_async(request: ContentGenerationRequest):
-    """流式生成内容（SSE + 线程池）- 在线程池中执行"""
+    """智能流式生成内容（SSE）- 空闲时直接执行，忙碌时使用线程池"""
     try:
         agent = agent_service.check_ready()
         
-        # 保存当前请求到会话
+        # 语言判断和验证
+        from ..i18n import Language
+        
+        try:
+            # 验证语言参数是否有效
+            target_language = Language(request.language)
+            logger.info(f"用户 {request.user_id} 请求语言: {target_language.value}")
+        except ValueError:
+            # 如果语言无效，使用默认语言
+            target_language = Language.ZH_CN
+            logger.warning(f"用户 {request.user_id} 使用了无效语言 '{request.language}'，已切换到默认语言: {target_language.value}")
+        
+        # 保存当前请求到会话，并记录目标语言
         session = session_service.get_user_session(request.user_id)
         session["current_request"] = request.dict()
+        session["target_language"] = target_language.value
         
         def stream_generator_func():
-            """在线程池中执行的流式生成器函数"""
+            """流式生成器函数"""
             content_req = ContentRequest(
                 category=agent_service.parse_content_category(request.category),
                 topic=request.topic,
@@ -172,33 +193,27 @@ async def generate_content_stream_async(request: ContentGenerationRequest):
                 length=request.length,
                 keywords=request.keywords or [],
                 target_audience=request.target_audience,
-                special_requirements=request.special_requirements
+                special_requirements=request.special_requirements,
+                language=target_language.value  # 使用验证后的语言
             )
             
             # 返回流式生成器
             return agent.generate_complete_post_stream(content_req, enable_thinking=request.enable_thinking)
         
-        # 提交流式任务到智能体线程池
-        task_id = agent_service.submit_stream_task(
-            task_type="generate_stream",
-            user_id=request.user_id,
-            generator_func=stream_generator_func,
-            priority=1  # 流式任务高优先级
-        )
-        
-        # 使用任务结果生成SSE流
-        async def sse_task_stream():
-            async for message in stream_service.generate_with_sse_from_task(
-                task_id, 
-                request.user_id, 
-                get_message("initial_generation", request.language)
+        # 使用智能路由进行流式生成
+        async def sse_smart_stream():
+            async for message in stream_service.generate_with_sse_smart(
+                generator_func=stream_generator_func,
+                user_id=request.user_id,
+                action=get_message("initial_generation", target_language),  # 使用目标语言获取消息
+                language=target_language  # 传递语言参数给SSE处理
             ):
                 yield message
         
-        return EventSourceResponse(sse_task_stream())
+        return EventSourceResponse(sse_smart_stream())
         
     except Exception as e:
-        logger.error(f"提交流式生成任务失败: {e}")
+        logger.error(f"智能流式生成任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -208,7 +223,7 @@ async def optimize_content(request: ContentOptimizationRequest):
     try:
         agent = agent_service.check_ready()
         
-        result = agent.optimize_content(request.content)
+        result = agent.optimize_content(request.content, request.language)
         
         if result["success"]:
             # 保存到历史
@@ -240,7 +255,7 @@ async def optimize_content_async(request: ContentOptimizationRequest):
         
         def optimize_task():
             """在智能体工作线程中执行的优化任务"""
-            result = agent.optimize_content(request.content)
+            result = agent.optimize_content(request.content, request.language)
             
             if result["success"]:
                 # 保存到历史（线程安全）
@@ -292,8 +307,13 @@ async def optimize_content_stream(request: ContentOptimizationRequest):
         # 使用SSE包装器，直接传递thinking参数给智能体
         async def sse_optimize_stream():
             # 直接传递enable_thinking参数，不修改全局状态
-            generator = agent.optimize_content_stream(request.content, enable_thinking=request.enable_thinking)
-            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("intelligent_optimization", request.language)):
+            generator = agent.optimize_content_stream(request.content, request.language, enable_thinking=request.enable_thinking)
+            from ..i18n import Language
+            try:
+                lang = Language(request.language)
+            except ValueError:
+                lang = Language.ZH_CN
+            async for message in stream_service.generate_with_sse(generator, request.user_id, get_message("intelligent_optimization", request.language), lang):
                 yield message
         
         return EventSourceResponse(sse_optimize_stream())
@@ -305,36 +325,41 @@ async def optimize_content_stream(request: ContentOptimizationRequest):
 
 @router.post("/optimize/stream/async")
 async def optimize_content_stream_async(request: ContentOptimizationRequest):
-    """流式优化内容（SSE + 线程池）- 在线程池中执行"""
+    """智能流式优化内容（SSE）- 空闲时直接执行，忙碌时使用线程池"""
     try:
         agent = agent_service.check_ready()
         
+        # 语言判断和验证
+        from ..i18n import Language
+        
+        try:
+            # 验证语言参数是否有效
+            target_language = Language(request.language)
+            logger.info(f"用户 {request.user_id} 优化请求语言: {target_language.value}")
+        except ValueError:
+            # 如果语言无效，使用默认语言
+            target_language = Language.ZH_CN
+            logger.warning(f"用户 {request.user_id} 使用了无效语言 '{request.language}'，已切换到默认语言: {target_language.value}")
+        
         def stream_optimizer_func():
-            """在线程池中执行的流式优化器函数"""
-            # 返回流式优化生成器
-            return agent.optimize_content_stream(request.content, enable_thinking=request.enable_thinking)
+            """流式优化器函数"""
+            # 返回流式优化生成器，使用验证后的语言
+            return agent.optimize_content_stream(request.content, target_language.value, enable_thinking=request.enable_thinking)
         
-        # 提交流式任务到智能体线程池
-        task_id = agent_service.submit_stream_task(
-            task_type="optimize_stream",
-            user_id=request.user_id,
-            generator_func=stream_optimizer_func,
-            priority=1  # 流式任务高优先级
-        )
-        
-        # 使用任务结果生成SSE流
-        async def sse_task_stream():
-            async for message in stream_service.generate_with_sse_from_task(
-                task_id, 
-                request.user_id, 
-                get_message("intelligent_optimization", request.language)
+        # 使用智能路由进行流式优化
+        async def sse_smart_stream():
+            async for message in stream_service.generate_with_sse_smart(
+                generator_func=stream_optimizer_func,
+                user_id=request.user_id,
+                action=get_message("intelligent_optimization", target_language),  # 使用目标语言获取消息
+                language=target_language  # 传递语言参数给SSE处理
             ):
                 yield message
         
-        return EventSourceResponse(sse_task_stream())
+        return EventSourceResponse(sse_smart_stream())
         
     except Exception as e:
-        logger.error(f"提交流式优化任务失败: {e}")
+        logger.error(f"智能流式优化任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -365,7 +390,8 @@ async def batch_generate_content(
                     length=req.length,
                     keywords=req.keywords or [],
                     target_audience=req.target_audience,
-                    special_requirements=req.special_requirements
+                    special_requirements=req.special_requirements,
+                    language=req.language
                 )
                 
                 result = agent.generate_complete_post(content_req)
