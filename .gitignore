@@ -1,0 +1,43 @@
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# SSL证书文件（开发环境）
+certs/*.pem
+certs/*.key
+certs/*.crt
+
+# 模型文件（如果很大的话）
+*.bin
+*.safetensors
+
+# 环境配置文件
+.env
+.env.local
+
+# 测试文件
+test_*.py
+*_test.py 
