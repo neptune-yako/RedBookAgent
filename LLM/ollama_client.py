@@ -4,10 +4,10 @@ import sys
 from typing import Optional, Dict, Any, Generator
 
 ollama_url1 = "http://localhost:11434"
-ollama_url2 = "http://1677347956223778.cn-hangzhou.pai-eas.aliyuncs.com/api/predict/qwen3_8b_redbook1"
+ollama_url2 = "https://d1ia07vhri0c73f8pm5g-11434.agent.damodel.com/"
 
 class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434"):
+    def __init__(self, base_url: str = ollama_url1):
         """
         初始化Ollama客户端
         
